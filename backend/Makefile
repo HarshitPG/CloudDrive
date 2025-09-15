@@ -47,3 +47,19 @@ watch:
 	}"
 
 .PHONY: all build run test clean watch docker-run docker-down itest
+
+
+createMigrations:
+	@migrate create -ext sql -dir migrations -seq $(name)
+
+migrateUp:
+	@migrate -database "postgres://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_DATABASE}?sslmode=disable" -path migrations up
+
+migrateDown:
+	@migrate -database "postgres://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_DATABASE}?sslmode=disable" -path migrations down
+
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
+

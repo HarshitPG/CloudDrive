@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"backend/internal/server"
+	"backend/pkg/logger"
 )
 
 func gracefulShutdown(apiServer *http.Server, done chan bool) {
@@ -39,6 +40,11 @@ func gracefulShutdown(apiServer *http.Server, done chan bool) {
 
 func main() {
 
+	if err := logger.Init(); err != nil {
+		log.Fatalf("could not initialize logger: %v", err)
+	}
+	defer logger.Sync()
+
 	server := server.NewServer()
 
 	// Create a done channel to signal when the shutdown is complete
@@ -46,6 +52,8 @@ func main() {
 
 	// Run graceful shutdown in a separate goroutine
 	go gracefulShutdown(server, done)
+
+	logger.L.Info("Server starting...")
 
 	err := server.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
