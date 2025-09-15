@@ -47,7 +47,7 @@ func NewService(db *sql.DB, emailSvc EmailService) Service {
 		db:         db,
 		emailSvc:   emailSvc,
 		jwtSecret:  secret,
-		accessTTL:  15 * time.Minute,
+		accessTTL:  120 * time.Minute,
 		refreshTTL: 7 * 24 * time.Hour,
 	}
 }

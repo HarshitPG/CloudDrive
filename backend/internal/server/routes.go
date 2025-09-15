@@ -2,11 +2,14 @@ package server
 
 import (
 	"backend/internal/api/rest"
+	"backend/internal/storage"
 	"backend/pkg/logger"
 	"net/http"
+	"os"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -31,6 +34,15 @@ func (s *Server) RegisterRoutes() http.Handler {
 	{
 		rest.RegisterAuthRoutes(api, s.db)
 
+		st, err := storage.NewMinioStorage()
+		if err != nil {
+			logger.L.Fatal("storage init failed", zap.Error(err))
+		}
+
+		jwtSecret := os.Getenv("JWT_SECRET")
+
+		rest.RegisterUploadRoutes(api, s.db.DB(), st, jwtSecret)
+		rest.RegisterFileRoutes(api, s.db.DB(), st, jwtSecret)
 	}
 
 	return r
