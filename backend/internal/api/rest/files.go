@@ -36,16 +36,22 @@ type fileHandler struct {
 
 func (h *fileHandler) download(c *gin.Context) {
 	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	fileId := c.Param("id")
+
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
 		return
 	}
-	fileId := c.Param("id")
-	var contentBlob string
-	var contentID string
-	var owner string
-	err := h.db.QueryRowContext(c.Request.Context(), "SELECT uf.content_id, fc.blob_key, uf.user_id FROM user_files uf JOIN file_contents fc ON uf.content_id=fc.id WHERE uf.id=$1 AND uf.deleted_at IS NULL", fileId).
-		Scan(&contentID, &contentBlob, &owner)
+
+	var contentBlob, contentID, owner string
+	err := h.db.QueryRowContext(c.Request.Context(),
+		`SELECT uf.content_id, fc.blob_key, uf.user_id
+         FROM user_files uf
+         JOIN file_contents fc ON uf.content_id=fc.id
+         WHERE uf.id=$1 AND uf.deleted_at IS NULL`,
+		fileId,
+	).Scan(&contentID, &contentBlob, &owner)
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
@@ -54,9 +60,28 @@ func (h *fileHandler) download(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
-	if owner != userID {
-		// TODO: check shares table if shared -> allow
-		c.JSON(http.StatusForbidden, gin.H{"error": "not owner"})
+
+	allowed := false
+	if owner == userID {
+		allowed = true
+	} else {
+		var count int
+		err = h.db.QueryRowContext(c.Request.Context(),
+			`SELECT COUNT(*) 
+             FROM shares 
+             WHERE target_type='file' 
+               AND target_id=$1 
+               AND revoked=false 
+               AND (is_public=true OR shared_with_user_id=$2)`,
+			fileId, userID,
+		).Scan(&count)
+		if err == nil && count > 0 {
+			allowed = true
+		}
+	}
+
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized"})
 		return
 	}
 
@@ -66,8 +91,13 @@ func (h *fileHandler) download(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed generate download url"})
 		return
 	}
-	_, _ = h.db.ExecContext(c.Request.Context(), "UPDATE user_files SET download_count = download_count + 1 WHERE id=$1", fileId)
-	_, _ = h.db.ExecContext(c.Request.Context(), "INSERT INTO audit_logs (user_id, action, target_type, target_id, created_at) VALUES ($1,'download','user_file',$2,now())", userID, fileId)
+
+	_, _ = h.db.ExecContext(c.Request.Context(),
+		"UPDATE user_files SET download_count = download_count + 1 WHERE id=$1", fileId)
+	_, _ = h.db.ExecContext(c.Request.Context(),
+		"INSERT INTO audit_logs (user_id, action, target_type, target_id, created_at) VALUES ($1,'download','user_file',$2,now())",
+		userID, fileId)
+
 	c.JSON(http.StatusOK, gin.H{"downloadUrl": url})
 }
 
@@ -77,7 +107,9 @@ func (h *fileHandler) delete(c *gin.Context) {
 
 	var owner string
 	var contentID string
-	err := h.db.QueryRowContext(c.Request.Context(), "SELECT user_id, content_id FROM user_files WHERE id=$1 AND deleted_at IS NULL", fileId).Scan(&owner, &contentID)
+	err := h.db.QueryRowContext(c.Request.Context(),
+		"SELECT user_id, content_id FROM user_files WHERE id=$1 AND deleted_at IS NULL",
+		fileId).Scan(&owner, &contentID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
@@ -98,15 +130,23 @@ func (h *fileHandler) delete(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
-	_, err = tx.ExecContext(c.Request.Context(), "UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1", contentID)
+
+	_, err = tx.ExecContext(c.Request.Context(),
+		"UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1", contentID)
 	if err != nil {
 		_ = tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
-	// TODO: schedule GC job in worker table / job queue (not implemented here)
+
+	// TODO: if ref_count == 0, schedule GC job in worker table / job queue
+	//       (so MinIO/S3 blob can be deleted later by background worker)
+
+	_, _ = tx.ExecContext(c.Request.Context(),
+		"UPDATE shares SET revoked=true WHERE target_type='file' AND target_id=$1", fileId)
+
 	_ = tx.Commit()
-	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	c.JSON(http.StatusOK, gin.H{"message": "deleted and shares revoked"})
 }
 
 func (h *fileHandler) restore(c *gin.Context) {
@@ -114,7 +154,9 @@ func (h *fileHandler) restore(c *gin.Context) {
 	fileId := c.Param("id")
 	var owner string
 	var contentID string
-	err := h.db.QueryRowContext(c.Request.Context(), "SELECT user_id, content_id FROM user_files WHERE id=$1 AND deleted_at IS NOT NULL", fileId).Scan(&owner, &contentID)
+	err := h.db.QueryRowContext(c.Request.Context(),
+		"SELECT user_id, content_id FROM user_files WHERE id=$1 AND deleted_at IS NOT NULL", fileId).
+		Scan(&owner, &contentID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found or not in trash"})
@@ -127,6 +169,7 @@ func (h *fileHandler) restore(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "not owner"})
 		return
 	}
+
 	tx, _ := h.db.BeginTx(c.Request.Context(), nil)
 	_, err = tx.ExecContext(c.Request.Context(), "UPDATE user_files SET deleted_at = NULL WHERE id=$1", fileId)
 	if err != nil {
@@ -140,8 +183,12 @@ func (h *fileHandler) restore(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
+
+	_, _ = tx.ExecContext(c.Request.Context(),
+		"UPDATE shares SET revoked=false WHERE target_type='file' AND target_id=$1", fileId)
+
 	_ = tx.Commit()
-	c.JSON(http.StatusOK, gin.H{"message": "restored"})
+	c.JSON(http.StatusOK, gin.H{"message": "restored (shares re-enabled)"})
 }
 
 type patchRequest struct {
@@ -330,7 +377,7 @@ func (h *fileHandler) getFileMetadata(c *gin.Context) {
 
 func (h *fileHandler) listFiles(c *gin.Context) {
 	userID := auth.GetUserIDFromCtx(c.Request.Context())
-	folderID := c.Query("folderId") // optional query param
+	folderID := c.Query("folderId")
 
 	var rows *sql.Rows
 	var err error

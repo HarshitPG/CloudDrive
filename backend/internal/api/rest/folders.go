@@ -214,6 +214,7 @@ func (h *folderHandler) rename(c *gin.Context) {
 func (h *folderHandler) delete(c *gin.Context) {
 	userID := auth.GetUserIDFromCtx(c.Request.Context())
 	folderID := c.Param("id")
+
 	_, err := h.db.ExecContext(c.Request.Context(),
 		`UPDATE folders SET deleted_at=now() WHERE id=$1 AND user_id=$2`,
 		folderID, userID,
@@ -222,5 +223,8 @@ func (h *folderHandler) delete(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "folder deleted"})
+	_, _ = h.db.ExecContext(c.Request.Context(),
+		"UPDATE shares SET revoked=true WHERE target_type='folder' AND target_id=$1", folderID)
+
+	c.JSON(http.StatusOK, gin.H{"message": "folder deleted and shares revoked"})
 }
