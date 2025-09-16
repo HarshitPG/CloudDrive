@@ -1,0 +1,27 @@
+schema:
+  - internal/api/graphql/schema/*.graphqls
+
+exec:
+  filename: internal/api/graphql/generated/generated.go
+  package: generated
+
+model:
+  filename: internal/api/graphql/model/models_gen.go
+  package: model
+
+resolver:
+  filename: internal/api/graphql/schema.resolvers.go
+  package: graphql
+
+# Remove the autobind line that's causing issues
+models:
+  ID:
+    model: github.com/99designs/gqlgen/graphql.ID
+  Int:
+    model: github.com/99designs/gqlgen/graphql.Int
+  String:
+    model: github.com/99designs/gqlgen/graphql.String
+  Boolean:
+    model: github.com/99designs/gqlgen/graphql.Boolean
+  Float:
+    model: github.com/99designs/gqlgen/graphql.Float

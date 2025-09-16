@@ -1,0 +1,40 @@
+# File Search schema
+
+type FileSearchResult {
+  id: ID!
+  filename: String!
+  mime: String!
+  size: Int!
+  createdAt: String!
+  updatedAt: String!
+  downloadCount: Int!
+  contentHash: String!
+  physicalSize: Int!
+  refCount: Int!
+  dedupSavings: Int!
+  rank: Float
+}
+
+type FileSearchResponse {
+  items: [FileSearchResult!]!
+  total: Int!
+  limit: Int!
+  offset: Int!
+}
+
+type Query {
+  searchFiles(
+    q: String
+    mime: String
+    minSize: Int
+    maxSize: Int
+    dateFrom: String
+    dateTo: String
+    tags: [String!]
+    uploader: String
+    folderId: ID
+    limit: Int
+    offset: Int
+    sort: String
+  ): FileSearchResponse!
+}

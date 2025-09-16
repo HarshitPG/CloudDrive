@@ -2,6 +2,7 @@ package server
 
 import (
 	"backend/internal/api/rest"
+	"backend/internal/auth"
 	"backend/internal/storage"
 	"backend/pkg/logger"
 	"net/http"
@@ -10,6 +11,11 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+
+	graphqllayer "backend/internal/api/graphql"
+	"backend/internal/api/graphql/generated"
+
+	"github.com/99designs/gqlgen/graphql/handler"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -30,6 +36,25 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.GET("/", s.HelloWorldHandler)
 
 	r.GET("/health", s.healthHandler)
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+
+	// GraphQL handlers (POST for queries/mutations)
+	{
+		execSchema := handler.NewDefaultServer(
+			generated.NewExecutableSchema(
+				generated.Config{Resolvers: &graphqllayer.Resolver{DB: s.db.DB()}},
+			),
+		)
+		r.POST("/api/v1/graphql", auth.RequireAuth(jwtSecret), func(c *gin.Context) {
+			execSchema.ServeHTTP(c.Writer, c.Request)
+		})
+		// Optional: playground (remove in prod)
+		// r.GET("/playground", func(c *gin.Context) {
+		// 	playground.Handler("GraphQL Playground", "/api/v1/graphql").ServeHTTP(c.Writer, c.Request)
+		// })
+	}
+
 	api := r.Group("/api/v1")
 	{
 		rest.RegisterAuthRoutes(api, s.db)
@@ -39,7 +64,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 			logger.L.Fatal("storage init failed", zap.Error(err))
 		}
 
-		jwtSecret := os.Getenv("JWT_SECRET")
+		// jwtSecret := os.Getenv("JWT_SECRET")
+		rest.RegisterSearchRoutes(api, s.db.DB(), jwtSecret)
 		rest.RegisterFolderRoutes(api, s.db.DB(), jwtSecret)
 		rest.RegisterShareRoutes(api, s.db.DB(), st, jwtSecret)
 		rest.RegisterUploadRoutes(api, s.db.DB(), st, jwtSecret)
