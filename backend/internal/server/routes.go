@@ -40,7 +40,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		}
 
 		jwtSecret := os.Getenv("JWT_SECRET")
-
+		rest.RegisterFolderRoutes(api, s.db.DB(), jwtSecret)
 		rest.RegisterUploadRoutes(api, s.db.DB(), st, jwtSecret)
 		rest.RegisterFileRoutes(api, s.db.DB(), st, jwtSecret)
 	}

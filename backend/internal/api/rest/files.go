@@ -18,6 +18,8 @@ func RegisterFileRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorag
 	files := rg.Group("/files")
 	files.Use(auth.RequireAuth(jwtSecret))
 	h := &fileHandler{db: db, storage: st}
+	files.GET("", h.listFiles)
+	files.GET("/:id", h.getFileMetadata)
 	files.GET("/:id/download", h.download)
 	files.DELETE("/:id", h.delete)
 	files.POST("/:id/restore", h.restore)
@@ -191,27 +193,45 @@ type moveRequest struct {
 func (h *fileHandler) move(c *gin.Context) {
 	userID := auth.GetUserIDFromCtx(c.Request.Context())
 	fileId := c.Param("id")
+
 	var owner string
-	err := h.db.QueryRowContext(c.Request.Context(), "SELECT user_id FROM user_files WHERE id=$1 AND deleted_at IS NULL", fileId).Scan(&owner)
+	err := h.db.QueryRowContext(c.Request.Context(),
+		"SELECT user_id FROM user_files WHERE id=$1 AND deleted_at IS NULL",
+		fileId,
+	).Scan(&owner)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 		return
 	}
 	if owner != userID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "not owner"})
 		return
 	}
+
 	var req moveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	// TODO:no ownership check on folder here; ensure folder belongs to user in production
-	_, _ = h.db.ExecContext(c.Request.Context(), "UPDATE user_files SET folder_id=$1, updated_at=now() WHERE id=$2", req.TargetFolderId, fileId)
+
+	var folderOwner string
+	err = h.db.QueryRowContext(c.Request.Context(),
+		"SELECT user_id FROM folders WHERE id=$1 AND deleted_at IS NULL",
+		req.TargetFolderId,
+	).Scan(&folderOwner)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "target folder not found"})
+		return
+	}
+	if folderOwner != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot move to folder you don't own"})
+		return
+	}
+
+	_, _ = h.db.ExecContext(c.Request.Context(),
+		"UPDATE user_files SET folder_id=$1, updated_at=now() WHERE id=$2",
+		req.TargetFolderId, fileId,
+	)
 	c.JSON(http.StatusOK, gin.H{"message": "moved"})
 }
 
@@ -260,4 +280,112 @@ func (h *fileHandler) listVersions(c *gin.Context) {
 		versions = append(versions, map[string]interface{}{"id": id, "content_id": contentID, "filename": filename, "created_at": createdAt})
 	}
 	c.JSON(http.StatusOK, gin.H{"versions": versions})
+}
+
+func (h *fileHandler) getFileMetadata(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	fileId := c.Param("id")
+
+	var filename, mime, contentHash string
+	var size, contentSize, refCount, downloadCount int64
+	var createdAt, updatedAt string
+
+	var folderID *string
+	err := h.db.QueryRowContext(c.Request.Context(), `
+    SELECT uf.filename, uf.declared_mime, uf.original_size_bytes,
+           uf.created_at, uf.updated_at, uf.download_count,
+           uf.folder_id,
+           fc.content_hash, fc.size_bytes, fc.ref_count
+    FROM user_files uf
+    JOIN file_contents fc ON uf.content_id = fc.id
+    WHERE uf.id=$1 AND uf.user_id=$2 AND uf.deleted_at IS NULL
+`, fileId, userID).Scan(&filename, &mime, &size,
+		&createdAt, &updatedAt, &downloadCount,
+		&folderID,
+		&contentHash, &contentSize, &refCount)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"filename":      filename,
+		"mime":          mime,
+		"size":          size,
+		"createdAt":     createdAt,
+		"updatedAt":     updatedAt,
+		"downloadCount": downloadCount,
+		"contentHash":   contentHash,
+		"physicalSize":  contentSize,
+		"refCount":      refCount,
+		"folderId":      folderID,
+		"dedupSavings":  size - contentSize,
+	})
+}
+
+func (h *fileHandler) listFiles(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	folderID := c.Query("folderId") // optional query param
+
+	var rows *sql.Rows
+	var err error
+	if folderID != "" {
+		rows, err = h.db.QueryContext(c.Request.Context(), `
+            SELECT uf.id, uf.filename, uf.declared_mime, uf.original_size_bytes,
+                   uf.created_at, uf.updated_at, uf.download_count,
+                   fc.content_hash, fc.size_bytes, fc.ref_count
+            FROM user_files uf
+            JOIN file_contents fc ON uf.content_id = fc.id
+            WHERE uf.user_id=$1 AND uf.folder_id=$2 AND uf.deleted_at IS NULL
+            ORDER BY uf.created_at DESC
+        `, userID, folderID)
+	} else {
+		rows, err = h.db.QueryContext(c.Request.Context(), `
+            SELECT uf.id, uf.filename, uf.declared_mime, uf.original_size_bytes,
+                   uf.created_at, uf.updated_at, uf.download_count,
+                   fc.content_hash, fc.size_bytes, fc.ref_count
+            FROM user_files uf
+            JOIN file_contents fc ON uf.content_id = fc.id
+            WHERE uf.user_id=$1 AND uf.folder_id IS NULL AND uf.deleted_at IS NULL
+            ORDER BY uf.created_at DESC
+        `, userID)
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+	defer rows.Close()
+
+	files := []map[string]interface{}{}
+	for rows.Next() {
+		var id, filename, mime, contentHash string
+		var size, contentSize, refCount, downloadCount int64
+		var createdAt, updatedAt string
+		if err := rows.Scan(&id, &filename, &mime, &size,
+			&createdAt, &updatedAt, &downloadCount,
+			&contentHash, &contentSize, &refCount); err != nil {
+			continue
+		}
+		files = append(files, map[string]interface{}{
+			"id":            id,
+			"filename":      filename,
+			"mime":          mime,
+			"size":          size,
+			"createdAt":     createdAt,
+			"updatedAt":     updatedAt,
+			"downloadCount": downloadCount,
+			"contentHash":   contentHash,
+			"physicalSize":  contentSize,
+			"refCount":      refCount,
+			"dedupSavings":  size - contentSize,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"files": files})
 }
