@@ -65,6 +65,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 		}
 
 		// jwtSecret := os.Getenv("JWT_SECRET")
+		rest.RegisterAdminRoutes(api, s.db.DB(), jwtSecret)
+		rest.RegisterQuotaRoutes(api, s.db.DB(), jwtSecret)
 		rest.RegisterSearchRoutes(api, s.db.DB(), jwtSecret)
 		rest.RegisterFolderRoutes(api, s.db.DB(), jwtSecret)
 		rest.RegisterShareRoutes(api, s.db.DB(), st, jwtSecret)

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/storage"
 	"backend/internal/utils"
@@ -349,6 +350,19 @@ func (h *uploadHandler) complete(c *gin.Context) {
 	}
 
 	_, _ = tx.ExecContext(c.Request.Context(), "UPDATE upload_sessions SET status='COMPLETED', client_sha256=$2, updated_at=now() WHERE id=$1", req.SessionId, sha)
+	_ = audit.Log(
+		c.Request.Context(),
+		h.db,
+		userID,
+		"upload",
+		"file",
+		newUserFileID,
+		map[string]interface{}{
+			"filename": filename,
+			"size":     originalSize,
+			"sha256":   sha,
+		},
+	)
 
 	if err := tx.Commit(); err != nil {
 		logger.L.Error("tx commit failed", zap.Error(err))

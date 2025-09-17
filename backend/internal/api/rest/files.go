@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/storage"
 	"backend/pkg/logger"
@@ -94,9 +95,17 @@ func (h *fileHandler) download(c *gin.Context) {
 
 	_, _ = h.db.ExecContext(c.Request.Context(),
 		"UPDATE user_files SET download_count = download_count + 1 WHERE id=$1", fileId)
-	_, _ = h.db.ExecContext(c.Request.Context(),
-		"INSERT INTO audit_logs (user_id, action, target_type, target_id, created_at) VALUES ($1,'download','user_file',$2,now())",
-		userID, fileId)
+	_ = audit.Log(
+		c.Request.Context(),
+		h.db,
+		userID,
+		"download",
+		"file",
+		fileId,
+		map[string]interface{}{
+			"blobKey": contentBlob,
+		},
+	)
 
 	c.JSON(http.StatusOK, gin.H{"downloadUrl": url})
 }
@@ -146,6 +155,17 @@ func (h *fileHandler) delete(c *gin.Context) {
 		"UPDATE shares SET revoked=true WHERE target_type='file' AND target_id=$1", fileId)
 
 	_ = tx.Commit()
+
+	_ = audit.Log(
+		c.Request.Context(),
+		h.db,
+		userID,
+		"delete",
+		"file",
+		fileId,
+		map[string]interface{}{
+			"contentID": contentID,
+		})
 	c.JSON(http.StatusOK, gin.H{"message": "deleted and shares revoked"})
 }
 
@@ -188,6 +208,17 @@ func (h *fileHandler) restore(c *gin.Context) {
 		"UPDATE shares SET revoked=false WHERE target_type='file' AND target_id=$1", fileId)
 
 	_ = tx.Commit()
+	_ = audit.Log(
+		c.Request.Context(),
+		h.db,
+		userID,
+		"restore",
+		"file",
+		fileId,
+		map[string]interface{}{
+			"contentID": contentID,
+		},
+	)
 	c.JSON(http.StatusOK, gin.H{"message": "restored (shares re-enabled)"})
 }
 

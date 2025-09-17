@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/storage"
 	"backend/pkg/logger"
@@ -379,8 +380,17 @@ func resolveShareHandler(db *sql.DB, st *storage.MinioStorage) gin.HandlerFunc {
 			}
 
 			_, _ = db.ExecContext(ctx, "UPDATE user_files SET download_count = download_count + 1 WHERE id=$1", ufid)
-			_, _ = db.ExecContext(ctx, "INSERT INTO audit_logs (user_id, action, target_type, target_id, created_at) VALUES (NULL,'public_download','file',$1,now())", ufid)
-
+			_ = audit.Log(
+				ctx,
+				db,
+				"",
+				"public_download",
+				"file",
+				ufid,
+				map[string]interface{}{
+					"token": token,
+				},
+			)
 			c.JSON(http.StatusOK, gin.H{
 				"type":     "file",
 				"fileId":   ufid,
