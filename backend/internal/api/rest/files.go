@@ -1,12 +1,15 @@
 package rest
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"backend/internal/audit"
 	"backend/internal/auth"
+	"backend/internal/cache"
 	"backend/internal/storage"
 	"backend/pkg/logger"
 
@@ -15,10 +18,10 @@ import (
 	//"github.com/google/uuid"
 )
 
-func RegisterFileRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorage, jwtSecret string) {
+func RegisterFileRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorage, jwtSecret string, cache cache.Cache) {
 	files := rg.Group("/files")
 	files.Use(auth.RequireAuth(jwtSecret))
-	h := &fileHandler{db: db, storage: st}
+	h := &fileHandler{db: db, storage: st, cache: cache}
 	files.GET("", h.listFiles)
 	files.GET("/:id", h.getFileMetadata)
 	files.GET("/:id/download", h.download)
@@ -33,6 +36,7 @@ func RegisterFileRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorag
 type fileHandler struct {
 	db      *sql.DB
 	storage *storage.MinioStorage
+	cache   cache.Cache
 }
 
 func (h *fileHandler) download(c *gin.Context) {
@@ -166,6 +170,17 @@ func (h *fileHandler) delete(c *gin.Context) {
 		map[string]interface{}{
 			"contentID": contentID,
 		})
+
+	// cache invalidation
+	var folderId sql.NullString
+	_ = h.db.QueryRowContext(c.Request.Context(),
+		"SELECT folder_id FROM user_files WHERE id=$1", fileId).Scan(&folderId)
+	if folderId.Valid {
+		cache.InvalidateFolder(c.Request.Context(), h.cache, folderId.String)
+	}
+	cache.InvalidateFile(c.Request.Context(), h.cache, fileId)
+	cache.InvalidateSearch(c.Request.Context(), h.cache, userID)
+
 	c.JSON(http.StatusOK, gin.H{"message": "deleted and shares revoked"})
 }
 
@@ -219,6 +234,17 @@ func (h *fileHandler) restore(c *gin.Context) {
 			"contentID": contentID,
 		},
 	)
+
+	// cache invalidation
+	var folderId sql.NullString
+	_ = h.db.QueryRowContext(c.Request.Context(),
+		"SELECT folder_id FROM user_files WHERE id=$1", fileId).Scan(&folderId)
+	if folderId.Valid {
+		cache.InvalidateFolder(c.Request.Context(), h.cache, folderId.String)
+	}
+	cache.InvalidateFile(c.Request.Context(), h.cache, fileId)
+	cache.InvalidateSearch(c.Request.Context(), h.cache, userID)
+
 	c.JSON(http.StatusOK, gin.H{"message": "restored (shares re-enabled)"})
 }
 
@@ -261,6 +287,10 @@ func (h *fileHandler) patch(c *gin.Context) {
 			fileId,
 		)
 	}
+	// cache invalidation
+	cache.InvalidateFile(c.Request.Context(), h.cache, fileId)
+	cache.InvalidateSearch(c.Request.Context(), h.cache, userID)
+
 	c.JSON(http.StatusOK, gin.H{"message": "updated"})
 }
 
@@ -306,10 +336,24 @@ func (h *fileHandler) move(c *gin.Context) {
 		return
 	}
 
+	var originalFolderId sql.NullString
+	_ = h.db.QueryRowContext(c.Request.Context(),
+		"SELECT folder_id FROM user_files WHERE id=$1", fileId).Scan(&originalFolderId)
+
 	_, _ = h.db.ExecContext(c.Request.Context(),
 		"UPDATE user_files SET folder_id=$1, updated_at=now() WHERE id=$2",
 		req.TargetFolderId, fileId,
 	)
+
+	// invalidate
+	if h.cache != nil {
+		if originalFolderId.Valid {
+			cache.InvalidateFolder(c.Request.Context(), h.cache, originalFolderId.String)
+		}
+		cache.InvalidateFolder(c.Request.Context(), h.cache, req.TargetFolderId)
+	}
+	cache.InvalidateFile(c.Request.Context(), h.cache, fileId)
+	cache.InvalidateSearch(c.Request.Context(), h.cache, userID)
 	c.JSON(http.StatusOK, gin.H{"message": "moved"})
 }
 
@@ -368,6 +412,19 @@ func (h *fileHandler) getFileMetadata(c *gin.Context) {
 	var size, contentSize, refCount, downloadCount int64
 	var createdAt, updatedAt string
 
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+
+	// Try cache first
+	cacheKey := cache.FileMetadataKey(fileId)
+	var cached map[string]interface{}
+	if h.cache != nil {
+		if err := h.cache.Get(ctx, cacheKey, &cached); err == nil {
+			c.JSON(http.StatusOK, cached)
+			return
+		}
+	}
+
 	var folderID *string
 	err := h.db.QueryRowContext(c.Request.Context(), `
     SELECT uf.filename, uf.declared_mime, uf.original_size_bytes,
@@ -391,7 +448,7 @@ func (h *fileHandler) getFileMetadata(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"filename":      filename,
 		"mime":          mime,
 		"size":          size,
@@ -403,7 +460,14 @@ func (h *fileHandler) getFileMetadata(c *gin.Context) {
 		"refCount":      refCount,
 		"folderId":      folderID,
 		"dedupSavings":  size - contentSize,
-	})
+	}
+
+	// Write-through cache
+	if h.cache != nil {
+		_ = h.cache.Set(ctx, cacheKey, resp, 5*time.Minute)
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *fileHandler) listFiles(c *gin.Context) {

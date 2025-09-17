@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"backend/internal/audit"
 	"backend/internal/auth"
+	"backend/internal/cache"
 	"backend/internal/storage"
 	"backend/pkg/logger"
 
@@ -16,12 +16,12 @@ import (
 	"go.uber.org/zap"
 )
 
-func RegisterShareRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorage, jwtSecret string) {
-	rg.GET("/s/:token", resolveShareHandler(db, st))
+func RegisterShareRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorage, jwtSecret string, c cache.Cache) {
+	rg.GET("/s/:token", resolveShareHandler(db, st, c))
 
 	protected := rg.Group("/shares")
 	protected.Use(auth.RequireAuth(jwtSecret))
-	h := &shareHandler{db: db, storage: st}
+	h := &shareHandler{db: db, storage: st, cache: c}
 
 	protected.POST("/files/:id/share", h.createPublicFileShare)
 	protected.DELETE("/shares/:id", h.revokeShare)
@@ -33,6 +33,7 @@ func RegisterShareRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStora
 type shareHandler struct {
 	db      *sql.DB
 	storage *storage.MinioStorage
+	cache   cache.Cache
 }
 
 func genToken() (string, error) {
@@ -97,6 +98,12 @@ func (h *shareHandler) createPublicFileShare(c *gin.Context) {
 	}
 
 	_, _ = h.db.ExecContext(c.Request.Context(), "UPDATE user_files SET is_public = true WHERE id=$1", fileId)
+
+	// Invalidate search
+	if h.cache != nil {
+		cache.InvalidateSearch(c.Request.Context(), h.cache, userID)
+		cache.InvalidateShare(c.Request.Context(), h.cache, shareID)
+	}
 
 	c.JSON(http.StatusCreated, gin.H{
 		"shareId": shareID,
@@ -319,44 +326,59 @@ func (h *shareHandler) revokeShare(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
+
+	// Invalidate cache
+	if h.cache != nil {
+		cache.InvalidateShare(c.Request.Context(), h.cache, shareId)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "revoked"})
 }
 
-// --- PUBLIC RESOLVE ---
 // GET /s/:token
 // No auth required. If token points to file -> return metadata + presigned download url(s).
 // If token points to folder -> return folder listing + presigned urls for files (first N).
-func resolveShareHandler(db *sql.DB, st *storage.MinioStorage) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		token := c.Param("token")
+func resolveShareHandler(db *sql.DB, st *storage.MinioStorage, c cache.Cache) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		token := ctx.Param("token")
+		cacheKey := cache.ShareResolveKey(token)
+
+		// try cache
+		if c != nil {
+			var cachedResp map[string]interface{}
+			if err := c.Get(ctx.Request.Context(), cacheKey, &cachedResp); err == nil {
+				ctx.JSON(http.StatusOK, cachedResp)
+				return
+			}
+		}
 
 		var id, targetType, targetId string
 		var expires sql.NullTime
-		err := db.QueryRowContext(c.Request.Context(), `
+		err := db.QueryRowContext(ctx.Request.Context(), `
 			SELECT id, target_type, target_id, expires_at
 			FROM shares
 			WHERE token=$1 AND revoked=false
 		`, token).Scan(&id, &targetType, &targetId, &expires)
 		if err != nil {
 			if err == sql.ErrNoRows {
-				c.JSON(http.StatusNotFound, gin.H{"error": "share not found"})
+				ctx.JSON(http.StatusNotFound, gin.H{"error": "share not found"})
 				return
 			}
 			logger.L.Error("db error", zap.Error(err))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 			return
 		}
 		if expires.Valid && expires.Time.Before(time.Now()) {
-			c.JSON(http.StatusGone, gin.H{"error": "share expired"})
+			ctx.JSON(http.StatusGone, gin.H{"error": "share expired"})
 			return
 		}
 
-		ctx := c.Request.Context()
+		resp := gin.H{}
 		switch targetType {
 		case "file":
 			var ufid, filename, blobKey string
 			var size int64
-			err := db.QueryRowContext(ctx, `
+			err := db.QueryRowContext(ctx.Request.Context(), `
 				SELECT uf.id, uf.filename, fc.blob_key, fc.size_bytes
 				FROM user_files uf
 				JOIN file_contents fc ON uf.content_id = fc.id
@@ -364,55 +386,32 @@ func resolveShareHandler(db *sql.DB, st *storage.MinioStorage) gin.HandlerFunc {
 			`, targetId).Scan(&ufid, &filename, &blobKey, &size)
 			if err != nil {
 				if err == sql.ErrNoRows {
-					c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+					ctx.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 					return
 				}
 				logger.L.Error("db error", zap.Error(err))
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 				return
 			}
 
-			url, err := st.PresignedGetURL(ctx, blobKey, 15)
+			url, err := st.PresignedGetURL(ctx.Request.Context(), blobKey, 15)
 			if err != nil {
 				logger.L.Error("presign failed", zap.Error(err))
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 				return
 			}
 
-			_, _ = db.ExecContext(ctx, "UPDATE user_files SET download_count = download_count + 1 WHERE id=$1", ufid)
-			_ = audit.Log(
-				ctx,
-				db,
-				"",
-				"public_download",
-				"file",
-				ufid,
-				map[string]interface{}{
-					"token": token,
-				},
-			)
-			c.JSON(http.StatusOK, gin.H{
+			resp = gin.H{
 				"type":     "file",
 				"fileId":   ufid,
 				"filename": filename,
 				"size":     size,
 				"download": url,
-			})
-			return
+			}
 
 		case "folder":
-			foldersRows, _ := db.QueryContext(ctx, `
-				SELECT id, name
-				FROM folders
-				WHERE id = $1 AND deleted_at IS NULL
-			`, targetId)
-			defer func() {
-				if foldersRows != nil {
-					_ = foldersRows.Close()
-				}
-			}()
-
-			rows, err := db.QueryContext(ctx, `
+			files := []map[string]interface{}{}
+			rows, err := db.QueryContext(ctx.Request.Context(), `
 				SELECT uf.id, uf.filename, fc.blob_key, fc.size_bytes
 				FROM user_files uf
 				JOIN file_contents fc ON uf.content_id = fc.id
@@ -421,17 +420,16 @@ func resolveShareHandler(db *sql.DB, st *storage.MinioStorage) gin.HandlerFunc {
 			`, targetId)
 			if err != nil {
 				logger.L.Error("db err", zap.Error(err))
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 				return
 			}
 			defer rows.Close()
 
-			files := []map[string]interface{}{}
 			for rows.Next() {
 				var fid, fname, blob string
 				var fsize int64
 				_ = rows.Scan(&fid, &fname, &blob, &fsize)
-				url, _ := st.PresignedGetURL(ctx, blob, 15)
+				url, _ := st.PresignedGetURL(ctx.Request.Context(), blob, 15)
 				files = append(files, map[string]interface{}{
 					"id":       fid,
 					"filename": fname,
@@ -439,15 +437,25 @@ func resolveShareHandler(db *sql.DB, st *storage.MinioStorage) gin.HandlerFunc {
 					"download": url,
 				})
 			}
-			c.JSON(http.StatusOK, gin.H{
-				"type":  "folder",
-				"files": files,
-			})
-			return
+			resp = gin.H{"type": "folder", "files": files}
 
 		default:
-			c.JSON(http.StatusBadRequest, gin.H{"error": "unknown share target"})
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "unknown share target"})
 			return
 		}
+
+		// set cache
+		if c != nil {
+			ttl := 5 * time.Minute
+			if expires.Valid {
+				expTtl := time.Until(expires.Time)
+				if expTtl < ttl {
+					ttl = expTtl
+				}
+			}
+			_ = c.Set(ctx.Request.Context(), cacheKey, resp, ttl)
+		}
+
+		ctx.JSON(http.StatusOK, resp)
 	}
 }

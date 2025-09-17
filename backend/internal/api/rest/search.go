@@ -2,6 +2,7 @@ package rest
 
 import (
 	"backend/internal/auth"
+	"backend/internal/cache"
 	"backend/internal/search"
 	"backend/pkg/logger"
 	"context"
@@ -15,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func RegisterSearchRoutes(rg *gin.RouterGroup, db *sql.DB, jwtSecret string) {
+func RegisterSearchRoutes(rg *gin.RouterGroup, db *sql.DB, jwtSecret string, c cache.Cache) {
 	s := rg.Group("/search")
 	s.Use(auth.RequireAuth(jwtSecret))
 	h := &searchHandler{db: db}
@@ -23,7 +24,8 @@ func RegisterSearchRoutes(rg *gin.RouterGroup, db *sql.DB, jwtSecret string) {
 }
 
 type searchHandler struct {
-	db *sql.DB
+	db    *sql.DB
+	cache cache.Cache
 }
 
 func (h *searchHandler) searchFiles(c *gin.Context) {
@@ -94,6 +96,23 @@ func (h *searchHandler) searchFiles(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
+	// Try cache
+	cacheKey := cache.SearchKey(userID, map[string]string{
+		"q":        p.Q,
+		"mime":     p.Mime,
+		"folderId": p.FolderID,
+		"sort":     p.Sort,
+		"limit":    strconv.Itoa(limit),
+		"offset":   strconv.Itoa(offset),
+	})
+	if h.cache != nil {
+		var cached gin.H
+		if err := h.cache.Get(ctx, cacheKey, &cached); err == nil {
+			c.JSON(http.StatusOK, cached)
+			return
+		}
+	}
+
 	query, countQuery, args := search.BuildQuery(p)
 	logger.L.Debug("search query built",
 		zap.String("query", query),
@@ -159,6 +178,10 @@ func (h *searchHandler) searchFiles(c *gin.Context) {
 		"limit":  limit,
 		"offset": offset,
 		"total":  total,
+	}
+	// Write-through cache
+	if h.cache != nil {
+		_ = h.cache.Set(ctx, cacheKey, resp, 30*time.Second)
 	}
 	c.JSON(http.StatusOK, resp)
 }

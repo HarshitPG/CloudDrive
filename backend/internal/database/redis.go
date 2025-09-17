@@ -8,7 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func InitRedis() *redis.Client {
+func InitRedis() (*redis.Client, error) {
 	addr := os.Getenv("REDIS_ADDR")
 	pass := os.Getenv("REDIS_PASSWORD")
 	db := 0
@@ -27,8 +27,7 @@ func InitRedis() *redis.Client {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		panic("failed to connect to Redis: " + err.Error())
+		return nil, err
 	}
-
-	return rdb
+	return rdb, nil
 }

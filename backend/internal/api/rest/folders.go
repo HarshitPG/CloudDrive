@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"backend/internal/auth"
+	"backend/internal/cache"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,7 +24,8 @@ func RegisterFolderRoutes(rg *gin.RouterGroup, db *sql.DB, jwtSecret string) {
 }
 
 type folderHandler struct {
-	db *sql.DB
+	db    *sql.DB
+	cache cache.Cache
 }
 
 type createFolderRequest struct {
@@ -47,6 +49,7 @@ func (h *folderHandler) create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
+	cache.InvalidateFolder(c.Request.Context(), h.cache, req.ParentID)
 	c.JSON(http.StatusCreated, gin.H{"message": "folder created"})
 }
 
@@ -54,6 +57,15 @@ func (h *folderHandler) listContents(c *gin.Context) {
 	userID := auth.GetUserIDFromCtx(c.Request.Context())
 	folderID := c.Param("id")
 
+	// Try cache first
+	cacheKey := cache.FolderContentsKey(folderID)
+	var cachedResponse gin.H
+	if h.cache != nil {
+		if err := h.cache.Get(c.Request.Context(), cacheKey, &cachedResponse); err == nil {
+			c.JSON(http.StatusOK, cachedResponse)
+			return
+		}
+	}
 	folderRows, err := h.db.QueryContext(c.Request.Context(),
 		`SELECT id, name, created_at FROM folders 
          WHERE user_id=$1 AND parent_id=$2 AND deleted_at IS NULL`,
@@ -103,10 +115,16 @@ func (h *folderHandler) listContents(c *gin.Context) {
 		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"folders": subfolders,
 		"files":   files,
-	})
+	}
+
+	// Write-through cache
+	if h.cache != nil {
+		_ = h.cache.Set(c.Request.Context(), cacheKey, resp, cache.TTLFolderList)
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *folderHandler) getTree(c *gin.Context) {
@@ -185,6 +203,11 @@ func (h *folderHandler) move(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
+
+	// cache invalidation
+	cache.InvalidateFolder(c.Request.Context(), h.cache, folderID)
+	cache.InvalidateFolder(c.Request.Context(), h.cache, req.TargetParentID)
+
 	c.JSON(http.StatusOK, gin.H{"message": "folder moved"})
 }
 
@@ -208,6 +231,9 @@ func (h *folderHandler) rename(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
+	// cache invalidation
+	cache.InvalidateFolder(c.Request.Context(), h.cache, folderID)
+
 	c.JSON(http.StatusOK, gin.H{"message": "folder renamed"})
 }
 
@@ -225,6 +251,10 @@ func (h *folderHandler) delete(c *gin.Context) {
 	}
 	_, _ = h.db.ExecContext(c.Request.Context(),
 		"UPDATE shares SET revoked=true WHERE target_type='folder' AND target_id=$1", folderID)
+
+	// cache invalidation
+	cache.InvalidateFolder(c.Request.Context(), h.cache, folderID)
+	cache.InvalidateSearch(c.Request.Context(), h.cache, userID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "folder deleted and shares revoked"})
 }
