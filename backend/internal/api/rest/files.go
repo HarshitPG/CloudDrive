@@ -18,10 +18,10 @@ import (
 	//"github.com/google/uuid"
 )
 
-func RegisterFileRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorage, jwtSecret string, cache cache.Cache) {
+func RegisterFileRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorage, jwtSecret string, cache cache.Cache, publish func(ctx context.Context, fileID string, downloadCount int64) error) {
 	files := rg.Group("/files")
 	files.Use(auth.RequireAuth(jwtSecret))
-	h := &fileHandler{db: db, storage: st, cache: cache}
+	h := &fileHandler{db: db, storage: st, cache: cache, publish: publish}
 	files.GET("", h.listFiles)
 	files.GET("/:id", h.getFileMetadata)
 	files.GET("/:id/download", h.download)
@@ -37,6 +37,7 @@ type fileHandler struct {
 	db      *sql.DB
 	storage *storage.MinioStorage
 	cache   cache.Cache
+	publish func(ctx context.Context, fileID string, downloadCount int64) error
 }
 
 func (h *fileHandler) download(c *gin.Context) {
@@ -97,8 +98,20 @@ func (h *fileHandler) download(c *gin.Context) {
 		return
 	}
 
-	_, _ = h.db.ExecContext(c.Request.Context(),
-		"UPDATE user_files SET download_count = download_count + 1 WHERE id=$1", fileId)
+	var newCount int64
+	err = h.db.QueryRowContext(c.Request.Context(),
+		"UPDATE user_files SET download_count = download_count + 1 WHERE id=$1 RETURNING download_count",
+		fileId,
+	).Scan(&newCount)
+	if err != nil {
+		logger.L.Warn("failed inc download_count", zap.Error(err))
+	} else {
+		go func(fileID string, count int64) {
+			if h.publish != nil {
+				_ = h.publish(c.Request.Context(), fileID, count)
+			}
+		}(fileId, newCount)
+	}
 	_ = audit.Log(
 		c.Request.Context(),
 		h.db,

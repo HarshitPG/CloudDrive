@@ -3,9 +3,11 @@ package server
 import (
 	"backend/internal/api/rest"
 	"backend/internal/auth"
+	"backend/internal/notifications"
 	ratelimit "backend/internal/ratelimiter"
 	"backend/internal/storage"
 	"backend/pkg/logger"
+	"context"
 	"net/http"
 	"os"
 	"time"
@@ -67,7 +69,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 		if err != nil {
 			logger.L.Fatal("storage init failed", zap.Error(err))
 		}
-
+		api.GET("/ws/downloads", auth.RequireAuth(jwtSecret), func(c *gin.Context) {
+			notifications.ServeWS(s.hub)(c.Writer, c.Request)
+		})
 		// jwtSecret := os.Getenv("JWT_SECRET")
 		rest.RegisterAdminRoutes(api, s.db.DB(), jwtSecret)
 		rest.RegisterQuotaRoutes(api, s.db.DB(), jwtSecret)
@@ -75,7 +79,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 		rest.RegisterFolderRoutes(api, s.db.DB(), jwtSecret)
 		rest.RegisterShareRoutes(api, s.db.DB(), st, jwtSecret, s.cache)
 		rest.RegisterUploadRoutes(api, s.db.DB(), st, jwtSecret)
-		rest.RegisterFileRoutes(api, s.db.DB(), st, jwtSecret, s.cache)
+		rest.RegisterFileRoutes(api, s.db.DB(), st, jwtSecret, s.cache, func(ctx context.Context, fileID string, count int64) error {
+			return notifications.PublishDownload(ctx, s.rdb, fileID, count)
+		})
 	}
 
 	return r

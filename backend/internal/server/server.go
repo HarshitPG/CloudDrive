@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"backend/internal/cache"
 	"backend/internal/database"
+	"backend/internal/notifications"
 	"backend/pkg/logger"
 )
 
@@ -21,6 +23,7 @@ type Server struct {
 	db    database.Service
 	rdb   *redis.Client
 	cache cache.Cache
+	hub   *notifications.Hub
 }
 
 func NewServer() *http.Server {
@@ -31,11 +34,16 @@ func NewServer() *http.Server {
 	}
 	redisCache := cache.NewRedisCache(rdb)
 	db := database.New()
+
+	hub := notifications.NewHub()
+	ctx := context.Background()
+	notifications.StartRedisSubscriber(ctx, rdb, hub)
 	NewServer := &Server{
 		port:  port,
 		db:    db,
 		rdb:   rdb,
 		cache: redisCache,
+		hub:   hub,
 	}
 
 	server := &http.Server{
