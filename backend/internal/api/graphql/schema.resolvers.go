@@ -1,34 +1,53 @@
 package graphql
 
-// THIS CODE WILL BE UPDATED WITH SCHEMA CHANGES. PREVIOUS IMPLEMENTATION FOR SCHEMA CHANGES WILL BE KEPT IN THE COMMENT SECTION. IMPLEMENTATION FOR UNCHANGED SCHEMA WILL BE KEPT.
-
 import (
 	"backend/internal/api/graphql/generated"
 	"backend/internal/api/graphql/model"
 	"backend/internal/auth"
 	"backend/internal/search"
+	"backend/pkg/logger"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"log"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type Resolver struct{ DB *sql.DB }
 
 func (r *queryResolver) SearchFiles(
 	ctx context.Context,
-	q *string, mime *string,
-	minSize *int, maxSize *int,
-	dateFrom *string, dateTo *string,
-	tags []string, uploader *string, folderID *string,
-	limit *int, offset *int, sort *string,
+	q *string,
+	mime *string,
+	minSize *int,
+	maxSize *int,
+	dateFrom *string,
+	dateTo *string,
+	tags []string,
+	uploader *string,
+	folderID *string,
+	limit *int,
+	offset *int,
+	sort *string,
 ) (*model.FileSearchResponse, error) {
 	userID := auth.GetUserIDFromCtx(ctx)
-	fmt.Printf("userid: %s\n", userID)
 	if userID == "" {
 		return nil, fmt.Errorf("unauthenticated")
 	}
+
+	lim := defaultInt(limit, 50)
+	if lim > 200 {
+		lim = 200
+	}
+	off := defaultInt(offset, 0)
+	if off < 0 {
+		off = 0
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
 	qVal := deref(q)
 	p := search.Params{
@@ -38,8 +57,8 @@ func (r *queryResolver) SearchFiles(
 		FolderID:      deref(folderID),
 		Uploader:      deref(uploader),
 		Sort:          defaultStr(sort, "created_at_desc"),
-		Limit:         defaultInt(limit, 50),
-		Offset:        defaultInt(offset, 0),
+		Limit:         lim,
+		Offset:        off,
 		IncludeRank:   qVal != "",
 		IncludeShared: true,
 	}
@@ -67,43 +86,23 @@ func (r *queryResolver) SearchFiles(
 	}
 
 	query, countQuery, args := search.BuildQuery(p)
-	log.Printf("SEARCH query=%s args=%v includeRank=%v", query, args, p.IncludeRank)
+	logger.L.Debug("search query built",
+		zap.String("query", query),
+		zap.Any("args", args),
+		zap.String("userID", userID),
+	)
 
-	rowsCh := make(chan *sql.Rows, 1)
-	errCh := make(chan error, 2)
-	countCh := make(chan int64, 1)
-
-	go func() {
-		rows, err := r.DB.QueryContext(ctx, query, args...)
-		if err != nil {
-			errCh <- err
-			return
-		}
-		rowsCh <- rows
-	}()
-
-	go func() {
-		var total int64
-		if err := r.DB.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
-			errCh <- err
-			return
-		}
-		countCh <- total
-	}()
-
-	var rows *sql.Rows
-	select {
-	case rows = <-rowsCh:
-	case err := <-errCh:
+	rows, err := r.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		logger.L.Error("search query failed", zap.Error(err))
 		return nil, err
 	}
 	defer rows.Close()
 
 	var total int64
-	select {
-	case total = <-countCh:
-	case err := <-errCh:
-		return nil, err
+	if err := r.DB.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		logger.L.Warn("search count query failed", zap.Error(err))
+		total = -1
 	}
 
 	items := []*model.FileSearchResult{}
@@ -111,14 +110,15 @@ func (r *queryResolver) SearchFiles(
 		f := &model.FileSearchResult{}
 		var createdAt, updatedAt time.Time
 		var rank *float64
-		err := rows.Scan(
+		if scanErr := rows.Scan(
 			&f.ID, &f.Filename, &f.Mime, &f.Size,
 			&createdAt, &updatedAt, &f.DownloadCount,
 			&f.ContentHash, &f.PhysicalSize, &f.RefCount, &rank,
-		)
-		if err != nil {
-			continue
+		); scanErr != nil {
+			logger.L.Error("row scan failed", zap.Error(scanErr))
+			return nil, errors.New("internal scan error")
 		}
+
 		f.CreatedAt = createdAt.Format(time.RFC3339)
 		f.UpdatedAt = updatedAt.Format(time.RFC3339)
 		f.DedupSavings = f.Size - f.PhysicalSize

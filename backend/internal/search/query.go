@@ -25,7 +25,6 @@ type Params struct {
 	IncludeShared bool
 }
 
-// BuildQuery builds SQL for search with filters and prefix search
 func BuildQuery(p Params) (string, string, []interface{}) {
 	where := []string{"uf.deleted_at IS NULL"}
 	args := []interface{}{}
@@ -33,8 +32,10 @@ func BuildQuery(p Params) (string, string, []interface{}) {
 
 	if p.UserID != "" {
 		where = append(where,
-			fmt.Sprintf("(uf.user_id = $%d OR EXISTS (SELECT 1 FROM share_users su JOIN shares s ON su.share_id = s.id WHERE s.target_type='file' AND s.revoked=false AND s.target_id = uf.id AND su.target_user_id = $%d))",
-				argIdx, argIdx),
+			fmt.Sprintf(
+				"(uf.user_id = $%d OR EXISTS (SELECT 1 FROM share_users su JOIN shares s ON su.share_id = s.id WHERE s.target_type='file' AND s.revoked=false AND s.target_id = uf.id AND su.target_user_id = $%d))",
+				argIdx, argIdx,
+			),
 		)
 		args = append(args, p.UserID)
 		argIdx++
@@ -45,13 +46,11 @@ func BuildQuery(p Params) (string, string, []interface{}) {
 		args = append(args, p.FolderID)
 		argIdx++
 	}
-
 	if p.Mime != "" {
 		where = append(where, fmt.Sprintf("uf.declared_mime = $%d", argIdx))
 		args = append(args, p.Mime)
 		argIdx++
 	}
-
 	if p.MinSize != nil {
 		where = append(where, fmt.Sprintf("uf.original_size_bytes >= $%d", argIdx))
 		args = append(args, *p.MinSize)
@@ -62,7 +61,6 @@ func BuildQuery(p Params) (string, string, []interface{}) {
 		args = append(args, *p.MaxSize)
 		argIdx++
 	}
-
 	if p.DateFrom != nil {
 		where = append(where, fmt.Sprintf("uf.created_at >= $%d", argIdx))
 		args = append(args, *p.DateFrom)
@@ -83,7 +81,10 @@ func BuildQuery(p Params) (string, string, []interface{}) {
 	joinUsers := ""
 	if p.Uploader != "" {
 		joinUsers = " JOIN users u ON u.id = uf.user_id "
-		where = append(where, fmt.Sprintf("to_tsvector('simple', coalesce(u.name,'')) @@ websearch_to_tsquery('simple', $%d)", argIdx))
+		where = append(where, fmt.Sprintf(
+			"to_tsvector('simple', coalesce(u.name,'')) @@ websearch_to_tsquery('simple', $%d)",
+			argIdx,
+		))
 		args = append(args, p.Uploader)
 		argIdx++
 	}
@@ -99,8 +100,6 @@ func BuildQuery(p Params) (string, string, []interface{}) {
 		rankSelect = fmt.Sprintf(", ts_rank_cd(uf.search_document, websearch_to_tsquery('simple',$%d)) as rank", argIdx)
 		orderRank = "rank DESC,"
 		argIdx += 2
-	} else {
-		rankSelect = ", NULL as rank"
 	}
 
 	orderBy := "uf.created_at DESC"

@@ -1,15 +1,15 @@
 package rest
 
 import (
+	"backend/internal/auth"
+	"backend/internal/search"
+	"backend/pkg/logger"
+	"context"
 	"database/sql"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-
-	"backend/internal/auth"
-	"backend/internal/search"
-	"backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -35,8 +35,12 @@ func (h *searchHandler) searchFiles(c *gin.Context) {
 
 	limit := 50
 	if v := c.Query("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 1000 {
-			limit = n
+		if n, err := strconv.Atoi(v); err == nil {
+			if n > 0 && n <= 200 {
+				limit = n
+			} else if n > 200 {
+				limit = 200
+			}
 		}
 	}
 	offset := 0
@@ -55,7 +59,7 @@ func (h *searchHandler) searchFiles(c *gin.Context) {
 		Sort:          c.DefaultQuery("sort", "created_at_desc"),
 		Limit:         limit,
 		Offset:        offset,
-		IncludeRank:   true,
+		IncludeRank:   c.Query("q") != "",
 		IncludeShared: true,
 	}
 
@@ -87,63 +91,48 @@ func (h *searchHandler) searchFiles(c *gin.Context) {
 		p.Tags = parts
 	}
 
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
 	query, countQuery, args := search.BuildQuery(p)
+	logger.L.Debug("search query built",
+		zap.String("query", query),
+		zap.Any("args", args),
+		zap.String("userID", userID),
+	)
 
-	type rowsResult struct {
-		rows *sql.Rows
-		err  error
-	}
-	rowsCh := make(chan rowsResult, 1)
-	countCh := make(chan struct {
-		n   int64
-		err error
-	}, 1)
-
-	go func() {
-		rows, err := h.db.QueryContext(c.Request.Context(), query, args...)
-		rowsCh <- rowsResult{rows: rows, err: err}
-	}()
-
-	go func() {
-		var total int64
-		err := h.db.QueryRowContext(c.Request.Context(), countQuery, args...).Scan(&total)
-		countCh <- struct {
-			n   int64
-			err error
-		}{n: total, err: err}
-	}()
-
-	rowsRes := <-rowsCh
-	if rowsRes.err != nil {
-		logger.L.Error("search rows failed", zap.Error(rowsRes.err))
+	rows, err := h.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		logger.L.Error("search rows query failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
-	defer rowsRes.rows.Close()
+	defer rows.Close()
 
-	countRes := <-countCh
-	if countRes.err != nil {
-		logger.L.Warn("search count failed", zap.Error(countRes.err))
+	var total int64
+	if err := h.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		logger.L.Warn("search count query failed", zap.Error(err))
+		total = -1
 	}
 
 	results := []map[string]interface{}{}
-	for rowsRes.rows.Next() {
-		var id, filename, mime, contentHash string
-		var size, contentSize, refCount, downloadCount int64
-		var createdAt, updatedAt time.Time
-		var rank *float64
+	for rows.Next() {
+		var (
+			id, filename, mime, contentHash string
+			size, contentSize, refCount     int64
+			downloadCount                   int64
+			createdAt, updatedAt            time.Time
+			rank                            *float64
+		)
 
-		scanErr := rowsRes.rows.Scan(
+		if scanErr := rows.Scan(
 			&id, &filename, &mime, &size,
 			&createdAt, &updatedAt, &downloadCount,
 			&contentHash, &contentSize, &refCount, &rank,
-		)
-		if scanErr != nil {
-			_ = rowsRes.rows.Scan(
-				&id, &filename, &mime, &size,
-				&createdAt, &updatedAt, &downloadCount,
-				&contentHash, &contentSize, &refCount,
-			)
+		); scanErr != nil {
+			logger.L.Error("row scan failed", zap.Error(scanErr))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal scan error"})
+			return
 		}
 
 		item := map[string]interface{}{
@@ -169,7 +158,7 @@ func (h *searchHandler) searchFiles(c *gin.Context) {
 		"items":  results,
 		"limit":  limit,
 		"offset": offset,
-		"total":  countRes.n,
+		"total":  total,
 	}
 	c.JSON(http.StatusOK, resp)
 }
