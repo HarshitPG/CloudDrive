@@ -8,21 +8,25 @@ import (
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/redis/go-redis/v9"
 
 	"backend/internal/database"
 )
 
 type Server struct {
 	port int
-
-	db database.Service
+	db   database.Service
+	rdb  *redis.Client
 }
 
 func NewServer() *http.Server {
 	port, _ := strconv.Atoi(os.Getenv("PORT"))
+	rdb := database.InitRedis()
+	db := database.New()
 	NewServer := &Server{
 		port: port,
-		db:   database.New(),
+		db:   db,
+		rdb:  rdb,
 	}
 
 	server := &http.Server{

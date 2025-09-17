@@ -3,10 +3,12 @@ package server
 import (
 	"backend/internal/api/rest"
 	"backend/internal/auth"
+	ratelimit "backend/internal/ratelimiter"
 	"backend/internal/storage"
 	"backend/pkg/logger"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -33,8 +35,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 		AllowCredentials: true,
 	}))
 
-	r.GET("/", s.HelloWorldHandler)
+	rl := ratelimit.NewRateLimiter(s.rdb, 2, time.Second)
+	r.Use(rl.Middleware())
 
+	r.GET("/", s.HelloWorldHandler)
 	r.GET("/health", s.healthHandler)
 
 	jwtSecret := os.Getenv("JWT_SECRET")
