@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"backend/internal/auth"
+	"backend/internal/worker"
 	"backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
@@ -187,6 +188,14 @@ func (h *adminHandler) adminForceDeleteHandler(c *gin.Context) {
 					_, _ = tx.ExecContext(ctx, "DELETE FROM file_contents WHERE id=$1", contentID)
 					// TODO: schedule background job to delete object from storage (MinIO/Azure Blob)
 					// insert into worker_jobs table or publish to Kafka/Redis queue for worker to delete blobKey
+					producer := worker.NewProducer()
+					defer producer.Close()
+
+					_ = producer.PublishGCJob(ctx, worker.GCJob{
+						ContentID: contentID,
+						BlobKey:   blobKey,
+					})
+
 					_, _ = tx.ExecContext(ctx, "INSERT INTO audit_logs (user_id, action, target_type, target_id, meta, created_at) VALUES ($1,'force_delete','content',$2,$3,now())", auth.GetUserIDFromCtx(c.Request.Context()), contentID, mapToJSON(map[string]string{"blobKey": blobKey}))
 				}
 			}
@@ -201,6 +210,14 @@ func (h *adminHandler) adminForceDeleteHandler(c *gin.Context) {
 		if err := tx.QueryRowContext(ctx, "SELECT blob_key FROM file_contents WHERE id=$1", body.ContentID).Scan(&blobKey); err == nil {
 			_, _ = tx.ExecContext(ctx, "DELETE FROM file_contents WHERE id=$1", body.ContentID)
 			// TODO: schedule background deletion of blobKey
+			producer := worker.NewProducer()
+			defer producer.Close()
+
+			_ = producer.PublishGCJob(ctx, worker.GCJob{
+				ContentID: body.ContentID,
+				BlobKey:   blobKey,
+			})
+
 			_, _ = tx.ExecContext(ctx, "INSERT INTO audit_logs (user_id, action, target_type, target_id, meta, created_at) VALUES ($1,'force_delete','content',$2,$3,now())", auth.GetUserIDFromCtx(c.Request.Context()), body.ContentID, mapToJSON(map[string]string{"blobKey": blobKey}))
 		}
 	} else {

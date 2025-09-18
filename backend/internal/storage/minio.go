@@ -106,3 +106,7 @@ func (s *MinioStorage) GetObjectReader(ctx context.Context, objectName string) (
 	}
 	return obj, nil
 }
+
+func MinioRemoveOpts() minio.RemoveObjectOptions {
+	return minio.RemoveObjectOptions{GovernanceBypass: true}
+}

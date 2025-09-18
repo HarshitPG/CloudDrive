@@ -11,6 +11,7 @@ import (
 	"backend/internal/auth"
 	"backend/internal/cache"
 	"backend/internal/storage"
+	"backend/internal/worker"
 	"backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
@@ -21,7 +22,8 @@ import (
 func RegisterFileRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorage, jwtSecret string, cache cache.Cache, publish func(ctx context.Context, fileID string, downloadCount int64) error) {
 	files := rg.Group("/files")
 	files.Use(auth.RequireAuth(jwtSecret))
-	h := &fileHandler{db: db, storage: st, cache: cache, publish: publish}
+	producer := worker.NewProducer()
+	h := &fileHandler{db: db, storage: st, cache: cache, publish: publish, producer: producer}
 	files.GET("", h.listFiles)
 	files.GET("/:id", h.getFileMetadata)
 	files.GET("/:id/download", h.download)
@@ -34,10 +36,11 @@ func RegisterFileRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorag
 }
 
 type fileHandler struct {
-	db      *sql.DB
-	storage *storage.MinioStorage
-	cache   cache.Cache
-	publish func(ctx context.Context, fileID string, downloadCount int64) error
+	db       *sql.DB
+	storage  *storage.MinioStorage
+	cache    cache.Cache
+	publish  func(ctx context.Context, fileID string, downloadCount int64) error
+	producer *worker.Producer
 }
 
 func (h *fileHandler) download(c *gin.Context) {
@@ -128,14 +131,19 @@ func (h *fileHandler) download(c *gin.Context) {
 }
 
 func (h *fileHandler) delete(c *gin.Context) {
-	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	ctx := c.Request.Context()
+	userID := auth.GetUserIDFromCtx(ctx)
 	fileId := c.Param("id")
 
-	var owner string
-	var contentID string
-	err := h.db.QueryRowContext(c.Request.Context(),
-		"SELECT user_id, content_id FROM user_files WHERE id=$1 AND deleted_at IS NULL",
-		fileId).Scan(&owner, &contentID)
+	var owner, contentID, blobKey string
+	err := h.db.QueryRowContext(ctx,
+		`SELECT uf.user_id, uf.content_id, fc.blob_key
+		 FROM user_files uf
+		 JOIN file_contents fc ON uf.content_id = fc.id
+		 WHERE uf.id=$1 AND uf.deleted_at IS NULL`,
+		fileId,
+	).Scan(&owner, &contentID, &blobKey)
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
@@ -144,22 +152,23 @@ func (h *fileHandler) delete(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
+
 	if owner != userID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "not owner"})
 		return
 	}
 
-	tx, _ := h.db.BeginTx(c.Request.Context(), nil)
-	_, err = tx.ExecContext(c.Request.Context(), "UPDATE user_files SET deleted_at = now() WHERE id=$1", fileId)
-	if err != nil {
+	tx, _ := h.db.BeginTx(ctx, nil)
+
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE user_files SET deleted_at = now() WHERE id=$1", fileId); err != nil {
 		_ = tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
 
-	_, err = tx.ExecContext(c.Request.Context(),
-		"UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1", contentID)
-	if err != nil {
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1", contentID); err != nil {
 		_ = tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
@@ -168,13 +177,29 @@ func (h *fileHandler) delete(c *gin.Context) {
 	// TODO: if ref_count == 0, schedule GC job in worker table / job queue
 	//       (so MinIO/S3 blob can be deleted later by background worker)
 
-	_, _ = tx.ExecContext(c.Request.Context(),
+	var refCount int64
+	if err := tx.QueryRowContext(ctx,
+		"SELECT ref_count FROM file_contents WHERE id=$1", contentID).Scan(&refCount); err == nil {
+		if refCount == 0 {
+			if h.producer != nil {
+				_ = h.producer.PublishGCJob(ctx, worker.GCJob{
+					ContentID: contentID,
+					BlobKey:   blobKey,
+				})
+			}
+		}
+	}
+
+	_, _ = tx.ExecContext(ctx,
 		"UPDATE shares SET revoked=true WHERE target_type='file' AND target_id=$1", fileId)
 
-	_ = tx.Commit()
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "commit failed"})
+		return
+	}
 
 	_ = audit.Log(
-		c.Request.Context(),
+		ctx,
 		h.db,
 		userID,
 		"delete",
@@ -182,17 +207,18 @@ func (h *fileHandler) delete(c *gin.Context) {
 		fileId,
 		map[string]interface{}{
 			"contentID": contentID,
-		})
+		},
+	)
 
 	// cache invalidation
 	var folderId sql.NullString
-	_ = h.db.QueryRowContext(c.Request.Context(),
+	_ = h.db.QueryRowContext(ctx,
 		"SELECT folder_id FROM user_files WHERE id=$1", fileId).Scan(&folderId)
 	if folderId.Valid {
-		cache.InvalidateFolder(c.Request.Context(), h.cache, folderId.String)
+		cache.InvalidateFolder(ctx, h.cache, folderId.String)
 	}
-	cache.InvalidateFile(c.Request.Context(), h.cache, fileId)
-	cache.InvalidateSearch(c.Request.Context(), h.cache, userID)
+	cache.InvalidateFile(ctx, h.cache, fileId)
+	cache.InvalidateSearch(ctx, h.cache, userID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "deleted and shares revoked"})
 }
