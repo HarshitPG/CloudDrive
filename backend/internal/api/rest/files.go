@@ -512,14 +512,27 @@ func (h *fileHandler) getFileMetadata(c *gin.Context) {
 func (h *fileHandler) listFiles(c *gin.Context) {
 	userID := auth.GetUserIDFromCtx(c.Request.Context())
 	folderID := c.Query("folderId")
+	deleted := c.Query("deleted") == "true"
 
 	var rows *sql.Rows
 	var err error
-	if folderID != "" {
+	if deleted {
+		// List files in trash for this user
+		rows, err = h.db.QueryContext(c.Request.Context(), `
+			SELECT uf.id, uf.filename, uf.declared_mime, uf.original_size_bytes,
+				   uf.created_at, uf.updated_at, uf.download_count,
+				   fc.content_hash, fc.size_bytes, fc.ref_count,
+				   uf.deleted_at
+			FROM user_files uf
+			JOIN file_contents fc ON uf.content_id = fc.id
+			WHERE uf.user_id=$1 AND uf.deleted_at IS NOT NULL
+			ORDER BY uf.deleted_at DESC
+		`, userID)
+	} else if folderID != "" {
 		rows, err = h.db.QueryContext(c.Request.Context(), `
             SELECT uf.id, uf.filename, uf.declared_mime, uf.original_size_bytes,
                    uf.created_at, uf.updated_at, uf.download_count,
-                   fc.content_hash, fc.size_bytes, fc.ref_count
+				   fc.content_hash, fc.size_bytes, fc.ref_count
             FROM user_files uf
             JOIN file_contents fc ON uf.content_id = fc.id
             WHERE uf.user_id=$1 AND uf.folder_id=$2 AND uf.deleted_at IS NULL
@@ -548,12 +561,22 @@ func (h *fileHandler) listFiles(c *gin.Context) {
 		var id, filename, mime, contentHash string
 		var size, contentSize, refCount, downloadCount int64
 		var createdAt, updatedAt string
-		if err := rows.Scan(&id, &filename, &mime, &size,
-			&createdAt, &updatedAt, &downloadCount,
-			&contentHash, &contentSize, &refCount); err != nil {
-			continue
+		var deletedAt sql.NullTime
+		if deleted {
+			if err := rows.Scan(&id, &filename, &mime, &size,
+				&createdAt, &updatedAt, &downloadCount,
+				&contentHash, &contentSize, &refCount,
+				&deletedAt); err != nil {
+				continue
+			}
+		} else {
+			if err := rows.Scan(&id, &filename, &mime, &size,
+				&createdAt, &updatedAt, &downloadCount,
+				&contentHash, &contentSize, &refCount); err != nil {
+				continue
+			}
 		}
-		files = append(files, map[string]interface{}{
+		item := map[string]interface{}{
 			"id":            id,
 			"filename":      filename,
 			"mime":          mime,
@@ -565,7 +588,11 @@ func (h *fileHandler) listFiles(c *gin.Context) {
 			"physicalSize":  contentSize,
 			"refCount":      refCount,
 			"dedupSavings":  size - contentSize,
-		})
+		}
+		if deleted && deletedAt.Valid {
+			item["deletedAt"] = deletedAt.Time
+		}
+		files = append(files, item)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"files": files})
