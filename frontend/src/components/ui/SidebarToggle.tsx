@@ -9,13 +9,17 @@ import {
   Trash2,
   Folder,
   Home,
+  Upload,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import QuotaWidget from "../QuotaWidget";
+import { uploadManager } from "@/lib/uploadManager";
+import { useRef } from "react";
 
 export default function SidebarToggle() {
   const [isOpen, setIsOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -58,6 +62,37 @@ export default function SidebarToggle() {
       </div>
 
       <nav className="flex-1 px-2">
+        {/* Upload action */}
+        <div className="mb-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            multiple
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length) {
+                uploadManager.addFiles(Array.from(e.target.files));
+                e.currentTarget.value = "";
+              }
+            }}
+          />
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            className={`flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition hover:bg-sidebar-accent text-sidebar-foreground`}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ")
+                fileInputRef.current?.click();
+            }}
+          >
+            <div className="shrink-0">
+              <Upload size={20} />
+            </div>
+            {isOpen && !isMobile && <span className="truncate">Upload</span>}
+          </div>
+        </div>
+
         <SidebarItem
           icon={<Home size={20} />}
           label="My Drive"

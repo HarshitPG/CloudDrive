@@ -41,6 +41,8 @@ import {
 } from "../../api/search";
 import { fileOperationsApi, folderOperationsApi } from "../../api/operations";
 import { downloadUrlToFile } from "@/lib/utils";
+import { UploadList } from "@/components/upload/UploadList";
+import { uploadManager } from "@/lib/uploadManager";
 
 const getFileIcon = (mimeType?: string, isFolder?: boolean) => {
   if (isFolder) return Folder;
@@ -112,6 +114,25 @@ export default function Home() {
     },
     []
   );
+
+  useEffect(() => {
+    // When uploads complete, refresh files/folders in background and merge results silently
+    const onDone = async () => {
+      try {
+        const [filesList, foldersList] = await Promise.all([
+          listFiles().catch(() => []),
+          listFolders().catch(() => []),
+        ]);
+        setItems([...foldersList, ...filesList]);
+      } catch (e) {
+        //
+      }
+    };
+    uploadManager.onDone(onDone);
+    return () => {
+      uploadManager.offDone(onDone);
+    };
+  }, [setItems]);
 
   useEffect(() => {
     let isMounted = true;
@@ -254,7 +275,6 @@ export default function Home() {
         await folderOperationsApi.deleteFolder(item.id);
       }
 
-      // Remove item from local state
       setItems(items.filter((i) => i.id !== item.id));
       setToastMessage(`"${item.name}" moved to trash`);
     } catch (error) {
@@ -426,7 +446,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <FilterModal
             filters={{ ...searchFilters, q: searchQuery }}
             onFiltersChange={handleFiltersChange}
@@ -511,6 +531,9 @@ export default function Home() {
           <p className="text-sm">{toastMessage}</p>
         </motion.div>
       )}
+
+      {/* Upload list floating panel */}
+      <UploadList />
     </>
   );
 }
