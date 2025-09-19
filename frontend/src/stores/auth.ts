@@ -14,7 +14,7 @@ type AuthState = {
   setUser: (u: User) => void;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  signup: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string, fullName: string) => Promise<void>;
   clearAuth: () => void;
 };
 
@@ -58,8 +58,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  signup: async (email: string, password: string) => {
-    await authAxios.post("/api/v1/auth/signup", { email, password });
+  signup: async (email: string, password: string, fullName: string) => {
+    await authAxios.post("/api/v1/auth/signup", { email, password, fullName });
   },
 
   clearAuth: () => {

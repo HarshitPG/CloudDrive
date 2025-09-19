@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+:root {
+  --color-primary: rgba(31, 143, 255, 1);
+  --color-primary-hover: rgba(29, 78, 216, 1);
+  --color-surface: rgba(249, 250, 251, 1);
+  --color-foreground: rgba(17, 24, 39, 1);
+  --color-muted: rgba(107, 114, 128, 1);
+  --shadow-glow: 0 0 15px rgba(37, 99, 235, 0.5);
+  --primary: 210 100% 56%;
+  --primary-foreground: 0 0% 100%;
+  --background: 0 0% 100%;
+  --foreground: 210 11% 15%;
+  --gradient-primary: linear-gradient(
+    135deg,
+    hsl(210 100% 56%),
+    hsl(210 100% 70%)
+  );
+  --gradient-surface: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 17% 98%));
+  --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(210 20% 96%));
+}
+
+body {
+  background-color: #f9fafb;
+  color: #111827;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.drive-card {
+  background-color: white;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  border-radius: 1rem;
+  border: 1px solid #e5e7eb;
+}
+
+.drive-button-primary {
+  background-color: var(--color-primary);
+  color: white;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.2s ease-in-out;
+}
+
+.drive-button-primary:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.drive-surface {
+  background-color: var(--color-surface);
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.drive-surface:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary);
+  border-color: transparent;
+}
