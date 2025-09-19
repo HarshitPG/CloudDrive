@@ -28,7 +28,7 @@ export default function LoginPage() {
     try {
       await login(email.trim(), password);
       console.log("Welcome back! You have been successfully logged in.");
-      nav("/");
+      nav("/dashboard/home");
     } catch (e: unknown) {
       let message = "Please check your credentials and try again.";
       if (e instanceof Error) {

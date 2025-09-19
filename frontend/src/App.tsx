@@ -5,19 +5,33 @@ import VerifyPage from "./pages/auth/Verify";
 import ForgotPasswordPage from "./pages/auth/ForgotPassword";
 import ResetPasswordPage from "./pages/auth/ResetPassword";
 import HomePage from "./pages/drive/Dashboard";
+import SharedView from "./pages/drive/SharedView";
+import PublicShareView from "./pages/drive/PublicShareView";
+import RecentView from "./pages/drive/RecentView";
+import StarredView from "./pages/drive/StarredView";
+import TrashView from "./pages/drive/TrashView";
 import ProtectedRoute from "./components/ProtectedRoute";
+import DashboardLayout from "./components/layout/DashboardLayout";
 
 export default function App() {
   return (
     <Routes>
+      <Route path="/s/:token" element={<PublicShareView />} />
+
       <Route
-        path="/"
+        path="/dashboard"
         element={
           <ProtectedRoute>
-            <HomePage />
+            <DashboardLayout />
           </ProtectedRoute>
         }
-      />
+      >
+        <Route path="home" element={<HomePage />} />
+        <Route path="shared" element={<SharedView />} />
+        <Route path="recent" element={<RecentView />} />
+        <Route path="starred" element={<StarredView />} />
+        <Route path="trash" element={<TrashView />} />
+      </Route>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/verify-email" element={<VerifyPage />} />
