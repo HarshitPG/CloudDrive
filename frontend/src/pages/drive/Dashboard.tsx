@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from "react";
-import { motion } from "framer-motion";
 import {
   Grid3X3,
   List,
@@ -30,8 +29,10 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import ShareModal from "@/components/ShareModal";
+import FileEditDialog from "@/components/FileEditDialog";
 import FilterModal from "@/components/FilterModal";
 import { useDriveStore, type DriveItem } from "../../stores/drive";
+import type { FileItem } from "../../api/files";
 import { listFiles } from "../../api/files";
 import { listFolders } from "../../api/folders";
 import {
@@ -87,6 +88,8 @@ export default function Home() {
 
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<DriveItem | null>(null);
+  const [editFile, setEditFile] = useState<FileItem | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
   const [loadingStates, setLoadingStates] = useState<Record<string, string>>(
     {}
   );
@@ -116,7 +119,6 @@ export default function Home() {
   );
 
   useEffect(() => {
-    // When uploads complete, refresh files/folders in background and merge results silently
     const onDone = async () => {
       try {
         const [filesList, foldersList] = await Promise.all([
@@ -321,12 +323,7 @@ export default function Home() {
     const isLoading = loadingStates[item.id];
 
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        whileHover={{ scale: 1.02 }}
-        transition={{ duration: 0.2 }}
-      >
+      <div>
         <Card className="drive-card cursor-pointer transition-all duration-200">
           <CardContent className="p-4">
             <div className="flex items-start justify-between mb-3">
@@ -367,6 +364,17 @@ export default function Home() {
                   >
                     <Share2 className="w-4 h-4 mr-2" />
                     Share
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (item.type !== "file") return;
+                      setEditFile(item as unknown as FileItem);
+                      setEditOpen(true);
+                    }}
+                    disabled={!!isLoading}
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Edit
                   </DropdownMenuItem>
                   <DropdownMenuItem disabled={!!isLoading}>
                     <Star className="w-4 h-4 mr-2" />
@@ -424,7 +432,7 @@ export default function Home() {
             </div>
           </CardContent>
         </Card>
-      </motion.div>
+      </div>
     );
   };
 
@@ -520,16 +528,35 @@ export default function Home() {
         />
       )}
 
+      <FileEditDialog
+        open={editOpen}
+        file={editFile}
+        onClose={() => {
+          setEditOpen(false);
+          setEditFile(null);
+        }}
+        onSaved={(updated) => {
+          const newItems = items.map((i) =>
+            i.id === updated.id
+              ? ({
+                  ...i,
+                  name: updated.name,
+                  filename: updated.filename,
+                  updatedAt: updated.updatedAt,
+                  tags: updated.tags,
+                } as DriveItem)
+              : i
+          );
+          setItems(newItems);
+          setToastMessage("File updated");
+        }}
+      />
+
       {/* Toast Notification */}
       {toastMessage && (
-        <motion.div
-          initial={{ opacity: 0, y: 50 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 50 }}
-          className="fixed bottom-4 right-4 bg-background border border-border rounded-lg shadow-lg p-4 max-w-sm z-50"
-        >
+        <div className="fixed bottom-4 right-4 bg-background border border-border rounded-lg shadow-lg p-4 max-w-sm z-50">
           <p className="text-sm">{toastMessage}</p>
-        </motion.div>
+        </div>
       )}
 
       {/* Upload list floating panel */}

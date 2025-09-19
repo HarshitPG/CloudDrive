@@ -80,3 +80,10 @@ export async function getFile(id: string): Promise<FileItem> {
 export async function deleteFile(id: string): Promise<void> {
   await axios.delete(`/api/v1/files/${id}`);
 }
+
+export async function patchFile(
+  id: string,
+  body: { filename?: string; tags?: string[] }
+): Promise<void> {
+  await axios.patch(`/api/v1/files/${id}`, body);
+}
