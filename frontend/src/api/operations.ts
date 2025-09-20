@@ -376,4 +376,38 @@ export const publicShareApi = {
       );
     }
   },
+  // Resolve a public share file
+  async resolveShare(
+    token: string
+  ): Promise<
+    | ({ type: "file" } & ResolvedPublicFile)
+    | ({ type: "folder" } & ResolvedPublicFolder)
+  > {
+    try {
+      const response = await axios.get(`/api/v1/s/${token}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(
+        `Failed to resolve share: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  },
 };
+
+export interface ResolvedPublicFile {
+  fileId: string;
+  filename: string;
+  size?: number;
+  download: string;
+}
+
+export interface ResolvedPublicFolder {
+  files: Array<{
+    id: string;
+    filename: string;
+    size?: number;
+    download?: string;
+  }>;
+}

@@ -81,6 +81,24 @@ export async function deleteFile(id: string): Promise<void> {
   await axios.delete(`/api/v1/files/${id}`);
 }
 
+// List trashed files for the current user
+export async function listDeletedFiles(page = 1, limit = 50) {
+  const res = await axios.get(`/api/v1/files`, {
+    params: { deleted: true, page, limit },
+  });
+  return res.data.files || [];
+}
+
+// Restore a trashed file
+export async function restoreFile(id: string): Promise<void> {
+  await axios.post(`/api/v1/files/${id}/restore`);
+}
+
+// Try to permanently delete a file
+export async function deleteFilePermanent(id: string): Promise<void> {
+  await axios.delete(`/api/v1/files/${id}?permanent=true`);
+}
+
 export async function patchFile(
   id: string,
   body: { filename?: string; tags?: string[] }

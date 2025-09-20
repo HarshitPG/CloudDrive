@@ -18,12 +18,14 @@ import {
   ChevronRight,
   Archive,
   Loader2,
+  Eye,
 } from "lucide-react";
 import {
   publicShareApi,
   type SharedFolderData,
   type SharedFolderItem,
 } from "@/api/operations";
+import FullscreenPreviewModal from "@/components/FullscreenPreviewModal";
 
 const getFileType = (filename: string): string => {
   const ext = filename.toLowerCase().split(".").pop() || "";
@@ -112,7 +114,13 @@ const ItemCard: React.FC<{
   item: SharedFolderItem;
   token: string;
   onFolderClick: (folderId: string, folderName: string) => void;
-}> = ({ item, token, onFolderClick }) => {
+  onPreview: (file: {
+    id: string;
+    name: string;
+    downloadUrl?: string;
+    mimeType?: string;
+  }) => void;
+}> = ({ item, token, onFolderClick, onPreview }) => {
   const [isDownloading, setIsDownloading] = useState(false);
 
   const IconComponent =
@@ -170,18 +178,38 @@ const ItemCard: React.FC<{
             )}
           </div>
           {item.type === "file" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDownload();
-              }}
-              disabled={isDownloading}
-              className="h-8 w-8 p-0"
-            >
-              <Download className="w-4 h-4" />
-            </Button>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPreview({
+                    id: item.id,
+                    name: item.name,
+                    downloadUrl: item.downloadUrl,
+                    mimeType: item.mimeType,
+                  });
+                }}
+                className="h-8 w-8 p-0"
+                title="Preview"
+              >
+                <Eye className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownload();
+                }}
+                disabled={isDownloading}
+                className="h-8 w-8 p-0"
+                title="Download"
+              >
+                <Download className="w-4 h-4" />
+              </Button>
+            </div>
           )}
         </div>
 
@@ -219,6 +247,12 @@ export default function PublicShareView() {
   const [breadcrumbPath, setBreadcrumbPath] = useState<
     { id: string; name: string }[]
   >([]);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<{
+    url?: string;
+    filename?: string;
+    mimeType?: string;
+  } | null>(null);
 
   const currentFolderId = searchParams.get("folderId");
 
@@ -305,6 +339,24 @@ export default function PublicShareView() {
       newParams.delete("folderId");
     }
     setSearchParams(newParams);
+  };
+
+  const handlePreview = async (file: {
+    id: string;
+    name: string;
+    downloadUrl?: string;
+    mimeType?: string;
+  }) => {
+    try {
+      let url = file.downloadUrl;
+      if (!url && token) {
+        url = await publicShareApi.downloadFromShare(token, file.id);
+      }
+      setPreviewData({ url, filename: file.name, mimeType: file.mimeType });
+      setPreviewOpen(true);
+    } catch (e) {
+      console.error("Failed to get preview URL", e);
+    }
   };
 
   if (!token) return <Navigate to="/" replace />;
@@ -450,6 +502,7 @@ export default function PublicShareView() {
                     item={item}
                     token={token}
                     onFolderClick={handleNavigateToFolder}
+                    onPreview={handlePreview}
                   />
                 ))}
               </div>
@@ -467,6 +520,13 @@ export default function PublicShareView() {
           </div>
         </div>
       ) : null}
+      <FullscreenPreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        url={previewData?.url}
+        filename={previewData?.filename}
+        mimeType={previewData?.mimeType}
+      />
     </motion.div>
   );
 }

@@ -7,6 +7,7 @@ import ResetPasswordPage from "./pages/auth/ResetPassword";
 import HomePage from "./pages/drive/Dashboard";
 import SharedView from "./pages/drive/SharedView";
 import PublicShareView from "./pages/drive/PublicShareView";
+import PublicShareResolver from "./pages/drive/PublicShareResolver";
 import RecentView from "./pages/drive/RecentView";
 import StarredView from "./pages/drive/StarredView";
 import TrashView from "./pages/drive/TrashView";
@@ -38,6 +39,7 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/fs/:token" element={<PublicShareView />} />
+      <Route path="/s/:token" element={<PublicShareResolver />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

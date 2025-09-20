@@ -7,6 +7,7 @@ import {
   Filter,
   MoreVertical,
   Download,
+  Eye,
   Share2,
   Star,
   Trash2,
@@ -52,6 +53,7 @@ import { fileOperationsApi, folderOperationsApi } from "../../api/operations";
 import { downloadUrlToFile } from "@/lib/utils";
 import { UploadList } from "@/components/upload/UploadList";
 import { uploadManager } from "@/lib/uploadManager";
+import FullscreenPreviewModal from "@/components/FullscreenPreviewModal";
 import {
   Dialog,
   DialogContent,
@@ -128,6 +130,14 @@ export default function Home() {
   const [deleteTarget, setDeleteTarget] = useState<DriveItem | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveTarget, setMoveTarget] = useState<DriveItem | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | undefined>(undefined);
+  const [previewFilename, setPreviewFilename] = useState<string | undefined>(
+    undefined
+  );
+  const [previewMimeType, setPreviewMimeType] = useState<string | undefined>(
+    undefined
+  );
   const isInFolder = !!folderId;
   const isSearchDisabled = isInFolder;
 
@@ -329,6 +339,34 @@ export default function Home() {
     }
   };
 
+  const handlePreview = async (item: DriveItem) => {
+    if (item.type === "folder") {
+      setToastMessage("Folder preview not supported");
+      return;
+    }
+
+    setLoadingStates((prev) => ({ ...prev, [item.id]: "preview" }));
+    try {
+      const result = await fileOperationsApi.downloadFile(item.id);
+      setPreviewUrl(result.downloadUrl);
+      setPreviewFilename(
+        "filename" in item && item.filename ? item.filename : item.name
+      );
+      setPreviewMimeType("mimeType" in item ? item.mimeType : undefined);
+      setPreviewOpen(true);
+    } catch (error) {
+      console.error("Preview failed:", error);
+      setToastMessage(
+        error instanceof Error ? error.message : "Preview failed"
+      );
+    } finally {
+      setLoadingStates((prev) => {
+        const { [item.id]: _, ...rest } = prev;
+        return rest;
+      });
+    }
+  };
+
   const handleShare = (item: DriveItem) => {
     setSelectedItem(item);
     setShareModalOpen(true);
@@ -478,135 +516,152 @@ export default function Home() {
                   <IconComponent className="w-5 h-5" />
                 )}
               </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+              <div className="flex items-center gap-1">
+                {item.type === "file" && (
                   <Button
                     variant="ghost"
                     className="h-8 w-8 p-0"
                     disabled={!!isLoading}
                     onClick={(e: MouseEvent<HTMLButtonElement>) => {
                       e.stopPropagation();
+                      handlePreview(item);
                     }}
+                    aria-label="Preview file"
+                    title="Preview"
                   >
-                    <MoreVertical className="w-4 h-4" />
+                    <Eye className="w-4 h-4" />
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {item.type === "file" && (
-                    <>
-                      <DropdownMenuItem
-                        onClick={(e: MouseEvent) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          handleDownload(item);
-                        }}
-                        disabled={!!isLoading}
-                      >
-                        <Download className="w-4 h-4 mr-2" />
-                        {isLoading === "download"
-                          ? "Downloading..."
-                          : "Download"}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={(e: MouseEvent) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          handleShare(item);
-                        }}
-                        disabled={!!isLoading}
-                      >
-                        <Share2 className="w-4 h-4 mr-2" />
-                        Share
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={(e: MouseEvent) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          setEditFile(item as FileItem);
-                          setEditOpen(true);
-                        }}
-                        disabled={!!isLoading}
-                      >
-                        <Edit3 className="w-4 h-4 mr-2" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={(e: MouseEvent) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          openMoveModal(item);
-                        }}
-                        disabled={!!isLoading}
-                      >
-                        <Folder className="w-4 h-4 mr-2" />
-                        Move
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={!!isLoading}
-                        onClick={(e: MouseEvent) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                        }}
-                      >
-                        <Star className="w-4 h-4 mr-2" />
-                        {meta.isStarred ? "Unstar" : "Star"}
-                      </DropdownMenuItem>
-                    </>
-                  )}
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      disabled={!!isLoading}
+                      onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                        e.stopPropagation();
+                      }}
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {item.type === "file" && (
+                      <>
+                        <DropdownMenuItem
+                          onClick={(e: MouseEvent) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            handleDownload(item);
+                          }}
+                          disabled={!!isLoading}
+                        >
+                          <Download className="w-4 h-4 mr-2" />
+                          {isLoading === "download"
+                            ? "Downloading..."
+                            : "Download"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e: MouseEvent) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            handleShare(item);
+                          }}
+                          disabled={!!isLoading}
+                        >
+                          <Share2 className="w-4 h-4 mr-2" />
+                          Share
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e: MouseEvent) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setEditFile(item as FileItem);
+                            setEditOpen(true);
+                          }}
+                          disabled={!!isLoading}
+                        >
+                          <Edit3 className="w-4 h-4 mr-2" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e: MouseEvent) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            openMoveModal(item);
+                          }}
+                          disabled={!!isLoading}
+                        >
+                          <Folder className="w-4 h-4 mr-2" />
+                          Move
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={!!isLoading}
+                          onClick={(e: MouseEvent) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                          }}
+                        >
+                          <Star className="w-4 h-4 mr-2" />
+                          {meta.isStarred ? "Unstar" : "Star"}
+                        </DropdownMenuItem>
+                      </>
+                    )}
 
-                  {item.type === "folder" && (
-                    <>
-                      <DropdownMenuItem
-                        onClick={(e: MouseEvent) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          handleEditFolder(item as FolderItem);
-                        }}
-                        disabled={!!isLoading}
-                      >
-                        <Edit3 className="w-4 h-4 mr-2" />
-                        Rename
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={(e: MouseEvent) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          handleShare(item);
-                        }}
-                        disabled={!!isLoading}
-                      >
-                        <Share2 className="w-4 h-4 mr-2" />
-                        Share
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={(e: MouseEvent) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          openMoveModal(item);
-                        }}
-                        disabled={!!isLoading}
-                      >
-                        <Folder className="w-4 h-4 mr-2" />
-                        Move
-                      </DropdownMenuItem>
-                    </>
-                  )}
+                    {item.type === "folder" && (
+                      <>
+                        <DropdownMenuItem
+                          onClick={(e: MouseEvent) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            handleEditFolder(item as FolderItem);
+                          }}
+                          disabled={!!isLoading}
+                        >
+                          <Edit3 className="w-4 h-4 mr-2" />
+                          Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e: MouseEvent) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            handleShare(item);
+                          }}
+                          disabled={!!isLoading}
+                        >
+                          <Share2 className="w-4 h-4 mr-2" />
+                          Share
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e: MouseEvent) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            openMoveModal(item);
+                          }}
+                          disabled={!!isLoading}
+                        >
+                          <Folder className="w-4 h-4 mr-2" />
+                          Move
+                        </DropdownMenuItem>
+                      </>
+                    )}
 
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive"
-                    onClick={(e: MouseEvent) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      openDeleteModal(item);
-                    }}
-                    disabled={!!isLoading}
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    {isLoading === "delete" ? "Deleting..." : "Delete"}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={(e: MouseEvent) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        openDeleteModal(item);
+                      }}
+                      disabled={!!isLoading}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      {isLoading === "delete" ? "Deleting..." : "Delete"}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
 
             <h3 className="font-medium text-foreground text-sm mb-2 truncate">
@@ -826,6 +881,19 @@ export default function Home() {
           }}
         />
       )}
+
+      <FullscreenPreviewModal
+        open={previewOpen}
+        onClose={() => {
+          setPreviewOpen(false);
+          setPreviewUrl(undefined);
+          setPreviewFilename(undefined);
+          setPreviewMimeType(undefined);
+        }}
+        url={previewUrl}
+        filename={previewFilename}
+        mimeType={previewMimeType}
+      />
 
       {/* Delete confirmation modal */}
       <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
