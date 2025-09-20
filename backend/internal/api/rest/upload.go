@@ -32,11 +32,306 @@ func RegisterUploadRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStor
 	uploads.POST("/session", h.createSession)
 	uploads.POST("/complete", h.complete)
 	uploads.POST("/abort", h.abort)
+	uploads.POST("/folder/init", h.folderInit)
 }
 
 type uploadHandler struct {
 	db      *sql.DB
 	storage *storage.MinioStorage
+}
+
+type FolderInitFile struct {
+	Path   string `json:"path" binding:"required"`
+	Size   int64  `json:"size" binding:"required"`
+	Mime   string `json:"mime"`
+	SHA256 string `json:"sha256"`
+}
+
+type FolderInitRequest struct {
+	ParentID       string           `json:"parentId"`
+	RootName       string           `json:"rootName" binding:"required"`
+	Files          []FolderInitFile `json:"files" binding:"required"`
+	IdempotencyKey string           `json:"idempotencyKey"`
+}
+
+type FolderInitFileResponse struct {
+	Path           string `json:"path"`
+	Deduped        bool   `json:"deduped"`
+	UserFileID     string `json:"userFileId,omitempty"`
+	SessionID      string `json:"sessionId,omitempty"`
+	UploadUrl      string `json:"uploadUrl,omitempty"`
+	TempBlobKey    string `json:"tempBlobKey,omitempty"`
+	TargetFolderID string `json:"targetFolderId,omitempty"`
+}
+
+type FolderInitResponse struct {
+	UploadID     string                   `json:"uploadId"`
+	RootFolderID string                   `json:"rootFolderId"`
+	Folders      []map[string]string      `json:"folders"`
+	Files        []FolderInitFileResponse `json:"files"`
+}
+
+// folderInit builds the folder tree under parent and prepares uploads or dedup fast-paths per file.
+func (h *uploadHandler) folderInit(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	var req FolderInitRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.Files) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no files provided"})
+		return
+	}
+
+	tx, err := h.db.BeginTx(c.Request.Context(), nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+	defer tx.Rollback()
+
+	// Create or reuse root folder
+	var rootFolderID string
+	q := `SELECT id FROM folders WHERE user_id=$1 AND COALESCE(parent_id::text,'') = NULLIF($2,'') AND name=$3 AND deleted_at IS NULL LIMIT 1`
+	err = tx.QueryRowContext(c.Request.Context(), q, userID, req.ParentID, req.RootName).Scan(&rootFolderID)
+	if err == sql.ErrNoRows {
+		err = tx.QueryRowContext(c.Request.Context(), `
+			INSERT INTO folders (id, user_id, parent_id, name, created_at, updated_at)
+			VALUES (gen_random_uuid(), $1, NULLIF($2,'')::uuid, $3, now(), now())
+			RETURNING id
+		`, userID, req.ParentID, req.RootName).Scan(&rootFolderID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+			return
+		}
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+
+	// Ensure subfolders exist
+	// map of path -> folderID; root path is ""
+	folderMap := map[string]string{"": rootFolderID}
+
+	ensureFolder := func(path string) (string, error) {
+		if id, ok := folderMap[path]; ok {
+			return id, nil
+		}
+		// split path into segments
+		// find parent path id progressively
+		for i, ch := range path {
+			if ch == '/' {
+				seg := path[:i]
+				if seg != "" {
+					if _, ok := folderMap[seg]; !ok {
+						// recursively ensure parent of seg
+						lastSlash := -1
+						for j := len(seg) - 1; j >= 0; j-- {
+							if seg[j] == '/' {
+								lastSlash = j
+								break
+							}
+						}
+						var pp string
+						var name string
+						if lastSlash >= 0 {
+							pp = seg[:lastSlash]
+							name = seg[lastSlash+1:]
+						} else {
+							pp = ""
+							name = seg
+						}
+						pid := folderMap[pp]
+						// create or reuse folder
+						var fid string
+						if err := tx.QueryRowContext(c.Request.Context(),
+							`SELECT id FROM folders WHERE user_id=$1 AND parent_id=$2 AND name=$3 AND deleted_at IS NULL LIMIT 1`,
+							userID, pid, name,
+						).Scan(&fid); err == sql.ErrNoRows {
+							if err := tx.QueryRowContext(c.Request.Context(),
+								`INSERT INTO folders (id, user_id, parent_id, name, created_at, updated_at)
+								 VALUES (gen_random_uuid(), $1, $2, $3, now(), now()) RETURNING id`,
+								userID, pid, name,
+							).Scan(&fid); err != nil {
+								return "", err
+							}
+						} else if err != nil {
+							return "", err
+						}
+						folderMap[seg] = fid
+					}
+				}
+			}
+		}
+		// Create final folder if not yet present
+		// path might be a single segment without slash
+		if path != "" {
+			if _, ok := folderMap[path]; !ok {
+				lastSlash := -1
+				for j := len(path) - 1; j >= 0; j-- {
+					if path[j] == '/' {
+						lastSlash = j
+						break
+					}
+				}
+				var pp string
+				var name string
+				if lastSlash >= 0 {
+					pp = path[:lastSlash]
+					name = path[lastSlash+1:]
+				} else {
+					pp = ""
+					name = path
+				}
+				pid := folderMap[pp]
+				var fid string
+				if err := tx.QueryRowContext(c.Request.Context(),
+					`SELECT id FROM folders WHERE user_id=$1 AND parent_id=$2 AND name=$3 AND deleted_at IS NULL LIMIT 1`,
+					userID, pid, name,
+				).Scan(&fid); err == sql.ErrNoRows {
+					if err := tx.QueryRowContext(c.Request.Context(),
+						`INSERT INTO folders (id, user_id, parent_id, name, created_at, updated_at)
+						 VALUES (gen_random_uuid(), $1, $2, $3, now(), now()) RETURNING id`,
+						userID, pid, name,
+					).Scan(&fid); err != nil {
+						return "", err
+					}
+				} else if err != nil {
+					return "", err
+				}
+				folderMap[path] = fid
+			}
+		}
+		return folderMap[path], nil
+	}
+
+	// Build set of directories from file paths
+	dirSet := map[string]struct{}{}
+	for _, f := range req.Files {
+		p := f.Path
+		// directory is everything before last '/'
+		last := -1
+		for i := len(p) - 1; i >= 0; i-- {
+			if p[i] == '/' {
+				last = i
+				break
+			}
+		}
+		dir := ""
+		if last > 0 {
+			dir = p[:last]
+		}
+		if dir != "" {
+			dirSet[dir] = struct{}{}
+		}
+	}
+	// Ensure each directory exists
+	for d := range dirSet {
+		if _, err := ensureFolder(d); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+			return
+		}
+	}
+
+	// Prepare responses
+	responses := make([]FolderInitFileResponse, 0, len(req.Files))
+	foldersOut := []map[string]string{}
+	for path, id := range folderMap {
+		foldersOut = append(foldersOut, map[string]string{"path": path, "folderId": id})
+	}
+
+	// For files: dedup fast path or create sessions
+	for _, f := range req.Files {
+		// target directory id
+		// compute dir
+		last := -1
+		for i := len(f.Path) - 1; i >= 0; i-- {
+			if f.Path[i] == '/' {
+				last = i
+				break
+			}
+		}
+		dir := ""
+		name := f.Path
+		if last >= 0 {
+			dir = f.Path[:last]
+			name = f.Path[last+1:]
+		}
+		targetFID := rootFolderID
+		if dir != "" {
+			if id, ok := folderMap[dir]; ok {
+				targetFID = id
+			}
+		}
+
+		// If SHA256 provided and matches existing content, create user_files immediately
+		if f.SHA256 != "" {
+			var contentID string
+			var sizeBytes int64
+			err := tx.QueryRowContext(c.Request.Context(),
+				"SELECT id, size_bytes FROM file_contents WHERE content_hash=$1 LIMIT 1",
+				f.SHA256,
+			).Scan(&contentID, &sizeBytes)
+			if err == nil {
+				var newUserFileID string
+				err = tx.QueryRowContext(c.Request.Context(), `
+					INSERT INTO user_files (id, user_id, content_id, filename, declared_mime, original_size_bytes, folder_id, created_at, updated_at)
+					VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, now(), now())
+					RETURNING id
+				`, userID, contentID, name, f.Mime, f.Size, targetFID).Scan(&newUserFileID)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+					return
+				}
+				if _, err := tx.ExecContext(c.Request.Context(),
+					"UPDATE file_contents SET ref_count = ref_count + 1 WHERE id=$1", contentID); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+					return
+				}
+				responses = append(responses, FolderInitFileResponse{
+					Path: f.Path, Deduped: true, UserFileID: newUserFileID,
+				})
+				continue
+			}
+		}
+
+		// Otherwise, create an upload session and presigned URL
+		sessionID := uuid.NewString()
+		tempName := fmt.Sprintf("tmp/%s/%s", sessionID, name)
+		url, err := h.storage.PresignedPutURL(c.Request.Context(), tempName, 30)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed generate upload url"})
+			return
+		}
+		if _, err := tx.ExecContext(c.Request.Context(), `
+			INSERT INTO upload_sessions (id, user_id, filename, declared_mime, original_size_bytes, temp_blob_key, client_sha256, status, created_at, updated_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,'OPEN',now(),now())
+		`, sessionID, userID, name, f.Mime, f.Size, tempName, f.SHA256); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed create session"})
+			return
+		}
+		responses = append(responses, FolderInitFileResponse{
+			Path: f.Path, Deduped: false, SessionID: sessionID, UploadUrl: url, TempBlobKey: tempName, TargetFolderID: targetFID,
+		})
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+
+	c.JSON(http.StatusOK, FolderInitResponse{
+		UploadID:     uuid.NewString(),
+		RootFolderID: rootFolderID,
+		Folders:      foldersOut,
+		Files:        responses,
+	})
 }
 
 type createSessionRequest struct {
@@ -174,6 +469,7 @@ func (h *uploadHandler) createSession(c *gin.Context) {
 type completeRequest struct {
 	SessionId    string `json:"sessionId" binding:"required"`
 	ClientSha256 string `json:"clientSha256"`
+	FolderID     string `json:"folderId"`
 }
 
 func (h *uploadHandler) complete(c *gin.Context) {
@@ -268,10 +564,10 @@ func (h *uploadHandler) complete(c *gin.Context) {
 	if err == nil {
 		var newUserFileID string
 		err = tx.QueryRowContext(c.Request.Context(), `
-			INSERT INTO user_files (id, user_id, content_id, filename, declared_mime, original_size_bytes, created_at, updated_at)
-			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, now(), now())
+			INSERT INTO user_files (id, user_id, content_id, filename, declared_mime, original_size_bytes, folder_id, created_at, updated_at)
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NULLIF($6,'')::uuid, now(), now())
 			RETURNING id
-		`, userID, contentID, filename, declaredMime, originalSize).Scan(&newUserFileID)
+		`, userID, contentID, filename, declaredMime, originalSize, req.FolderID).Scan(&newUserFileID)
 		if err != nil {
 			logger.L.Error("insert user_files dedup failed", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
@@ -339,10 +635,10 @@ func (h *uploadHandler) complete(c *gin.Context) {
 
 	var newUserFileID string
 	err = tx.QueryRowContext(c.Request.Context(), `
-		INSERT INTO user_files (id, user_id, content_id, filename, declared_mime, original_size_bytes, created_at, updated_at)
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, now(), now())
+		INSERT INTO user_files (id, user_id, content_id, filename, declared_mime, original_size_bytes, folder_id, created_at, updated_at)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NULLIF($6,'')::uuid, now(), now())
 		RETURNING id
-	`, userID, newContentID, filename, declaredMime, originalSize).Scan(&newUserFileID)
+	`, userID, newContentID, filename, declaredMime, originalSize, req.FolderID).Scan(&newUserFileID)
 	if err != nil {
 		logger.L.Error("insert user_files final failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
