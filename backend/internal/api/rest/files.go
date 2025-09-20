@@ -135,14 +135,22 @@ func (h *fileHandler) delete(c *gin.Context) {
 	userID := auth.GetUserIDFromCtx(ctx)
 	fileId := c.Param("id")
 
+	permanent := c.Query("permanent") == "true"
+
 	var owner, contentID, blobKey string
+	var folderId sql.NullString
+	cond := "uf.deleted_at IS NULL"
+	if permanent {
+		cond = "TRUE"
+	}
+
 	err := h.db.QueryRowContext(ctx,
-		`SELECT uf.user_id, uf.content_id, fc.blob_key
+		`SELECT uf.user_id, uf.content_id, fc.blob_key, uf.folder_id
 		 FROM user_files uf
 		 JOIN file_contents fc ON uf.content_id = fc.id
-		 WHERE uf.id=$1 AND uf.deleted_at IS NULL`,
+		 WHERE uf.id=$1 AND `+cond,
 		fileId,
-	).Scan(&owner, &contentID, &blobKey)
+	).Scan(&owner, &contentID, &blobKey, &folderId)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -158,40 +166,100 @@ func (h *fileHandler) delete(c *gin.Context) {
 		return
 	}
 
+	if !permanent {
+		tx, _ := h.db.BeginTx(ctx, nil)
+
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE user_files SET deleted_at = now() WHERE id=$1", fileId); err != nil {
+			_ = tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+			return
+		}
+
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1", contentID); err != nil {
+			_ = tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+			return
+		}
+		// NOTE: No GC scheduling on soft delete. GC will be scheduled on permanent delete only.
+
+		_, _ = tx.ExecContext(ctx,
+			"UPDATE shares SET revoked=true WHERE target_type='file' AND target_id=$1", fileId)
+
+		if err := tx.Commit(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "commit failed"})
+			return
+		}
+
+		_ = audit.Log(
+			ctx,
+			h.db,
+			userID,
+			"delete",
+			"file",
+			fileId,
+			map[string]interface{}{
+				"contentID": contentID,
+			},
+		)
+
+		// cache invalidation
+		if folderId.Valid {
+			cache.InvalidateFolder(ctx, h.cache, folderId.String)
+		} else {
+			var f sql.NullString
+			_ = h.db.QueryRowContext(ctx, "SELECT folder_id FROM user_files WHERE id=$1", fileId).Scan(&f)
+			if f.Valid {
+				cache.InvalidateFolder(ctx, h.cache, f.String)
+			}
+		}
+		cache.InvalidateFile(ctx, h.cache, fileId)
+		cache.InvalidateSearch(ctx, h.cache, userID)
+
+		c.JSON(http.StatusOK, gin.H{"message": "deleted and shares revoked"})
+		return
+	}
+
+	// Permanent delete
 	tx, _ := h.db.BeginTx(ctx, nil)
 
-	if _, err := tx.ExecContext(ctx,
-		"UPDATE user_files SET deleted_at = now() WHERE id=$1", fileId); err != nil {
+	// Delete the user_files row
+	if _, err := tx.ExecContext(ctx, "DELETE FROM user_files WHERE id=$1", fileId); err != nil {
 		_ = tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
-
-	if _, err := tx.ExecContext(ctx,
-		"UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1", contentID); err != nil {
-		_ = tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
-		return
-	}
-
-	// TODO: if ref_count == 0, schedule GC job in worker table / job queue
-	//       (so MinIO/S3 blob can be deleted later by background worker)
 
 	var refCount int64
 	if err := tx.QueryRowContext(ctx,
-		"SELECT ref_count FROM file_contents WHERE id=$1", contentID).Scan(&refCount); err == nil {
-		if refCount == 0 {
-			if h.producer != nil {
-				_ = h.producer.PublishGCJob(ctx, worker.GCJob{
-					ContentID: contentID,
-					BlobKey:   blobKey,
-				})
-			}
+		"UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1 RETURNING ref_count",
+		contentID,
+	).Scan(&refCount); err != nil {
+		_ = tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+
+	// Schedule GC only on permanent delete when ref_count hits 0
+	if refCount == 0 {
+		if h.producer != nil {
+			_ = h.producer.PublishGCJob(ctx, worker.GCJob{
+				ContentID: contentID,
+				BlobKey:   blobKey,
+			})
+		}
+		// Remove file_contents metadata from DB since no more references exist
+		if _, err := tx.ExecContext(ctx, "DELETE FROM file_contents WHERE id=$1", contentID); err != nil {
+			_ = tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+			return
 		}
 	}
 
+	// Remove any shares referencing this file permanently
 	_, _ = tx.ExecContext(ctx,
-		"UPDATE shares SET revoked=true WHERE target_type='file' AND target_id=$1", fileId)
+		"DELETE FROM shares WHERE target_type='file' AND target_id=$1", fileId)
 
 	if err := tx.Commit(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "commit failed"})
@@ -207,20 +275,18 @@ func (h *fileHandler) delete(c *gin.Context) {
 		fileId,
 		map[string]interface{}{
 			"contentID": contentID,
+			"permanent": true,
 		},
 	)
 
-	// cache invalidation
-	var folderId sql.NullString
-	_ = h.db.QueryRowContext(ctx,
-		"SELECT folder_id FROM user_files WHERE id=$1", fileId).Scan(&folderId)
+	// cache invalidation: use captured folderId
 	if folderId.Valid {
 		cache.InvalidateFolder(ctx, h.cache, folderId.String)
 	}
 	cache.InvalidateFile(ctx, h.cache, fileId)
 	cache.InvalidateSearch(ctx, h.cache, userID)
 
-	c.JSON(http.StatusOK, gin.H{"message": "deleted and shares revoked"})
+	c.JSON(http.StatusOK, gin.H{"message": "permanently deleted and shares revoked"})
 }
 
 func (h *fileHandler) restore(c *gin.Context) {

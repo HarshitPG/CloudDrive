@@ -411,7 +411,7 @@ func (h *uploadHandler) getUsageAndQuota(ctx context.Context, userID string) (in
 	if err := h.db.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(original_size_bytes),0)
 		FROM user_files
-		WHERE user_id=$1 AND deleted_at IS NULL
+		WHERE user_id=$1
 	`, userID).Scan(&used); err != nil {
 		return 0, 0, err
 	}

@@ -40,7 +40,7 @@ func (h *quotaHandler) getMyUsage(c *gin.Context) {
 	var original int64
 	if err := h.db.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(original_size_bytes),0) FROM user_files
-		WHERE user_id=$1 AND deleted_at IS NULL
+		WHERE user_id=$1
 	`, userID).Scan(&original); err != nil {
 		logger.L.Error("original usage query failed", zap.Error(err), zap.String("userID", userID))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
@@ -53,7 +53,7 @@ func (h *quotaHandler) getMyUsage(c *gin.Context) {
 		FROM file_contents fc
 		JOIN (
 			SELECT DISTINCT content_id FROM user_files
-			WHERE user_id=$1 AND deleted_at IS NULL
+			WHERE user_id=$1
 		) u ON u.content_id = fc.id
 	`, userID).Scan(&deduped); err != nil {
 		logger.L.Error("deduped usage query failed", zap.Error(err), zap.String("userID", userID))

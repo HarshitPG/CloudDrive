@@ -475,15 +475,7 @@ func (h *folderHandler) delete(c *gin.Context) {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 					return
 				}
-				var refCount int64
-				_ = tx.QueryRowContext(c.Request.Context(),
-					"SELECT ref_count FROM file_contents WHERE id=$1", contentID).Scan(&refCount)
-				if refCount == 0 && h.producer != nil {
-					_ = h.producer.PublishGCJob(c.Request.Context(), worker.GCJob{
-						ContentID: contentID,
-						BlobKey:   blobKey,
-					})
-				}
+				// No GC scheduling on soft delete; GC will be scheduled on permanent delete path.
 
 				_, _ = tx.ExecContext(c.Request.Context(),
 					"UPDATE shares SET revoked=true WHERE target_type='file' AND target_id=$1", fileId)
@@ -572,30 +564,38 @@ func (h *folderHandler) delete(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 				return
 			}
-			// Decrement ref_count and if 0 schedule GC
-			if _, err := tx.ExecContext(c.Request.Context(),
-				"UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1", contentID); err != nil {
+			// Decrement ref_count and if 0 schedule GC (permanent delete only)
+			var refCount int64
+			if err := tx.QueryRowContext(c.Request.Context(),
+				"UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1 RETURNING ref_count",
+				contentID,
+			).Scan(&refCount); err != nil {
 				_ = tx.Rollback()
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 				return
 			}
-			var refCount int64
-			_ = tx.QueryRowContext(c.Request.Context(),
-				"SELECT ref_count FROM file_contents WHERE id=$1", contentID).Scan(&refCount)
-			if refCount == 0 && h.producer != nil {
-				_ = h.producer.PublishGCJob(c.Request.Context(), worker.GCJob{
-					ContentID: contentID,
-					BlobKey:   blobKey,
-				})
+			if refCount == 0 {
+				if h.producer != nil {
+					_ = h.producer.PublishGCJob(c.Request.Context(), worker.GCJob{
+						ContentID: contentID,
+						BlobKey:   blobKey,
+					})
+				}
+				// delete file_contents metadata row
+				if _, err := tx.ExecContext(c.Request.Context(), "DELETE FROM file_contents WHERE id=$1", contentID); err != nil {
+					_ = tx.Rollback()
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+					return
+				}
 			}
-			// Revoke shares on file
+			// Remove shares on file permanently
 			_, _ = tx.ExecContext(c.Request.Context(),
-				"UPDATE shares SET revoked=true WHERE target_type='file' AND target_id=$1", fileId)
+				"DELETE FROM shares WHERE target_type='file' AND target_id=$1", fileId)
 		}
 		_ = frows.Close()
-		// Revoke shares on folder
+		// Remove shares on folder permanently
 		_, _ = tx.ExecContext(c.Request.Context(),
-			"UPDATE shares SET revoked=true WHERE target_type='folder' AND target_id=$1", fid)
+			"DELETE FROM shares WHERE target_type='folder' AND target_id=$1", fid)
 	}
 
 	// Delete folders themselves

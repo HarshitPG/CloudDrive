@@ -37,7 +37,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		AllowCredentials: true,
 	}))
 
-	rl := ratelimit.NewRateLimiter(s.rdb, 2, time.Second)
+	rl := ratelimit.NewRateLimiter(s.rdb, 20, time.Second)
 	r.Use(rl.Middleware())
 
 	r.GET("/", s.HelloWorldHandler)
@@ -78,6 +78,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		rest.RegisterSearchRoutes(api, s.db.DB(), jwtSecret, s.cache)
 		rest.RegisterFolderRoutes(api, s.db.DB(), jwtSecret)
 		rest.RegisterShareRoutes(api, s.db.DB(), st, jwtSecret, s.cache)
+		rest.RegisterFolderShareRoutes(api, s.db.DB(), st, jwtSecret, s.cache)
 		rest.RegisterUploadRoutes(api, s.db.DB(), st, jwtSecret)
 		rest.RegisterFileRoutes(api, s.db.DB(), st, jwtSecret, s.cache, func(ctx context.Context, fileID string, count int64) error {
 			return notifications.PublishDownload(ctx, s.rdb, fileID, count)
