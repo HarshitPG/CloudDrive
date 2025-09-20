@@ -27,12 +27,14 @@ export default function App() {
         }
       >
         <Route path="home" element={<HomePage />} />
+        <Route path="home/folder/:folderId" element={<HomePage />} />
         <Route path="shared" element={<SharedView />} />
         <Route path="recent" element={<RecentView />} />
         <Route path="starred" element={<StarredView />} />
         <Route path="trash" element={<TrashView />} />
       </Route>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/verify-email" element={<VerifyPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />

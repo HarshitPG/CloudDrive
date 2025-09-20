@@ -146,6 +146,21 @@ export const fileOperationsApi = {
       );
     }
   },
+
+  // Move a file to a different folder
+  async moveFile(fileId: string, targetFolderId: string): Promise<void> {
+    try {
+      await axios.post(`/api/v1/files/${fileId}/move`, {
+        targetFolderId,
+      });
+    } catch (error) {
+      throw new Error(
+        `Failed to move file: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  },
 };
 
 // Folder Operations API
@@ -179,6 +194,21 @@ export const folderOperationsApi = {
     } catch (error) {
       throw new Error(
         `Failed to create public folder share: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  },
+
+  // Move a folder under a different parent folder
+  async moveFolder(folderId: string, targetParentId: string): Promise<void> {
+    try {
+      await axios.post(`/api/v1/folders/${folderId}/move`, {
+        targetParentId,
+      });
+    } catch (error) {
+      throw new Error(
+        `Failed to move folder: ${
           error instanceof Error ? error.message : "Unknown error"
         }`
       );

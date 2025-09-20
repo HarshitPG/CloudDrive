@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type MouseEvent } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   Grid3X3,
   List,
@@ -16,6 +17,9 @@ import {
   Music,
   Archive,
   Loader2,
+  Edit3,
+  ChevronRight,
+  Home as HomeIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,12 +33,16 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import ShareModal from "@/components/ShareModal";
+import MoveModal from "@/components/MoveModal";
 import FileEditDialog from "@/components/FileEditDialog";
+import FolderEditDialog from "@/components/FolderEditDialog";
+import CreateFolderDialog from "@/components/CreateFolderDialog";
 import FilterModal from "@/components/FilterModal";
 import { useDriveStore, type DriveItem } from "../../stores/drive";
 import type { FileItem } from "../../api/files";
+import type { FolderItem } from "../../api/folders";
 import { listFiles } from "../../api/files";
-import { listFolders } from "../../api/folders";
+import { listFolders, deleteFolder, getFolderFiles } from "../../api/folders";
 import {
   searchFiles,
   type SearchFilters,
@@ -44,6 +52,14 @@ import { fileOperationsApi, folderOperationsApi } from "../../api/operations";
 import { downloadUrlToFile } from "@/lib/utils";
 import { UploadList } from "@/components/upload/UploadList";
 import { uploadManager } from "@/lib/uploadManager";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 const getFileIcon = (mimeType?: string, isFolder?: boolean) => {
   if (isFolder) return Folder;
@@ -74,6 +90,9 @@ const formatDate = (dateString: string) => {
 };
 
 export default function Home() {
+  const { folderId } = useParams<{ folderId: string }>();
+  const navigate = useNavigate();
+
   const {
     items,
     setItems,
@@ -81,6 +100,11 @@ export default function Home() {
     setSearchQuery,
     viewMode,
     setViewMode,
+    addItem,
+    updateItem,
+    removeItem,
+    currentFolderId,
+    setCurrentFolderId,
   } = useDriveStore();
   const [filteredItems, setFilteredItems] = useState<DriveItem[]>([]);
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({});
@@ -90,10 +114,22 @@ export default function Home() {
   const [selectedItem, setSelectedItem] = useState<DriveItem | null>(null);
   const [editFile, setEditFile] = useState<FileItem | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [editFolder, setEditFolder] = useState<FolderItem | null>(null);
+  const [folderEditOpen, setFolderEditOpen] = useState(false);
   const [loadingStates, setLoadingStates] = useState<Record<string, string>>(
     {}
   );
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [currentFolder, setCurrentFolder] = useState<FolderItem | null>(null);
+  const [breadcrumbs, setBreadcrumbs] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<DriveItem | null>(null);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveTarget, setMoveTarget] = useState<DriveItem | null>(null);
+  const isInFolder = !!folderId;
+  const isSearchDisabled = isInFolder;
 
   const convertSearchResultToDriveItem = useCallback(
     (result: FileSearchResult): DriveItem => {
@@ -118,49 +154,71 @@ export default function Home() {
     []
   );
 
-  useEffect(() => {
-    const onDone = async () => {
-      try {
+  const loadData = useCallback(async () => {
+    try {
+      if (folderId) {
+        const [foldersList, filesList] = await Promise.all([
+          listFolders(folderId).catch(() => []),
+          getFolderFiles(folderId).catch(() => []),
+        ]);
+        const transformedFiles = filesList.map((file) => ({
+          id: file.id,
+          name: file.filename,
+          filename: file.filename,
+          type: "file" as const,
+          mimeType: file.mime,
+          mime: file.mime,
+          size: file.size,
+          createdAt: file.createdAt,
+          updatedAt: file.updatedAt,
+          isShared: false,
+          isStarred: false,
+          isTrashed: false,
+          downloadCount: file.downloadCount,
+          tags: [],
+          version: 1,
+          contentHash: file.contentHash,
+          physicalSize: file.physicalSize,
+          refCount: file.refCount,
+          dedupSavings: file.dedupSavings,
+        }));
+
+        setItems([...foldersList, ...transformedFiles]);
+        setCurrentFolderId(folderId);
+      } else {
         const [filesList, foldersList] = await Promise.all([
           listFiles().catch(() => []),
           listFolders().catch(() => []),
         ]);
         setItems([...foldersList, ...filesList]);
-      } catch (e) {
-        //
+        setCurrentFolderId(undefined);
       }
+    } catch (e) {
+      console.error("Failed to load data:", e);
+    }
+  }, [setItems, folderId, setCurrentFolderId]);
+
+  useEffect(() => {
+    const onDone = async () => {
+      await loadData();
     };
     uploadManager.onDone(onDone);
     return () => {
       uploadManager.offDone(onDone);
     };
-  }, [setItems]);
+  }, [loadData]);
+
+  useEffect(() => {
+    if (isSearchDisabled && searchQuery) {
+      setSearchQuery("");
+    }
+  }, [isSearchDisabled, searchQuery, setSearchQuery]);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadRoot() {
-      try {
-        const files = await listFiles().catch((err) => {
-          console.error("Failed to load files:", err);
-          return [];
-        });
-
-        if (!isMounted) return;
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        const folders = await listFolders().catch((err) => {
-          console.error("Failed to load folders:", err);
-          return [];
-        });
-
-        if (!isMounted) return;
-        setItems([...folders, ...files]);
-      } catch (error) {
-        console.error("Failed to load root:", error);
-        if (isMounted) setItems([]);
-      }
+      await loadData();
     }
 
     const timer = setTimeout(loadRoot, 100);
@@ -169,10 +227,17 @@ export default function Home() {
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [setItems]);
+  }, [loadData]);
 
   // Search effect
   useEffect(() => {
+    // Disable search when in folder view
+    if (isSearchDisabled) {
+      setFilteredItems(items);
+      setIsSearching(false);
+      return;
+    }
+
     // Build search filters including text query
     const filters: SearchFilters = {
       ...searchFilters,
@@ -213,14 +278,20 @@ export default function Home() {
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [searchQuery, searchFilters, items, convertSearchResultToDriveItem]);
+  }, [
+    searchQuery,
+    searchFilters,
+    items,
+    convertSearchResultToDriveItem,
+    isSearchDisabled,
+  ]);
 
   // Update filtered items when items change
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    if (!searchQuery.trim() || isSearchDisabled) {
       setFilteredItems(items);
     }
-  }, [items, searchQuery]);
+  }, [items, searchQuery, isSearchDisabled]);
 
   useEffect(() => {
     if (toastMessage) {
@@ -263,21 +334,29 @@ export default function Home() {
     setShareModalOpen(true);
   };
 
-  const handleDelete = async (item: DriveItem) => {
-    if (!confirm(`Are you sure you want to delete "${item.name}"?`)) {
-      return;
-    }
+  const openMoveModal = (item: DriveItem) => {
+    setMoveTarget(item);
+    setMoveOpen(true);
+  };
+  const openDeleteModal = (item: DriveItem) => {
+    setDeleteTarget(item);
+    setDeleteModalOpen(true);
+  };
 
+  const performDelete = async (item: DriveItem | null) => {
+    if (!item) return;
+
+    setDeleteModalOpen(false);
     setLoadingStates((prev) => ({ ...prev, [item.id]: "delete" }));
 
     try {
       if (item.type === "file") {
         await fileOperationsApi.deleteFile(item.id);
       } else {
-        await folderOperationsApi.deleteFolder(item.id);
+        await deleteFolder(item.id);
       }
 
-      setItems(items.filter((i) => i.id !== item.id));
+      removeItem(item.id);
       setToastMessage(`"${item.name}" moved to trash`);
     } catch (error) {
       console.error("Delete failed:", error);
@@ -287,6 +366,7 @@ export default function Home() {
         const { [item.id]: _, ...rest } = prev;
         return rest;
       });
+      setDeleteTarget(null);
     }
   };
 
@@ -296,6 +376,57 @@ export default function Home() {
 
   const handleFiltersReset = () => {
     setSearchFilters({});
+  };
+
+  const handleFolderCreated = async (folderName: string) => {
+    await loadData();
+    setToastMessage(`Folder "${folderName}" created`);
+  };
+
+  const handleFolderRenamed = (folderId: string, newName: string) => {
+    updateItem(folderId, { name: newName } as Partial<DriveItem>);
+    setToastMessage(`Folder renamed to "${newName}"`);
+  };
+
+  const handleEditFolder = (folder: FolderItem) => {
+    setEditFolder(folder);
+    setFolderEditOpen(true);
+  };
+
+  const handleFolderClick = (folder: FolderItem) => {
+    navigate(`/dashboard/home/folder/${folder.id}`);
+  };
+
+  const handleBreadcrumbClick = (folderId?: string) => {
+    if (folderId) {
+      navigate(`/dashboard/home/folder/${folderId}`);
+    } else {
+      navigate("/dashboard/home");
+    }
+  };
+
+  const Breadcrumb = () => {
+    if (!isInFolder) return null;
+
+    return (
+      <div className="flex items-center gap-2 mb-4">
+        <button
+          onClick={() => handleBreadcrumbClick()}
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <HomeIcon className="w-4 h-4" />
+          Home
+        </button>
+        {folderId && (
+          <>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium">
+              {currentFolder?.name || "Current Folder"}
+            </span>
+          </>
+        )}
+      </div>
+    );
   };
 
   const handleShareSuccess = (shareUrl: string) => {
@@ -324,7 +455,14 @@ export default function Home() {
 
     return (
       <div>
-        <Card className="drive-card cursor-pointer transition-all duration-200">
+        <Card
+          className="drive-card cursor-pointer transition-all duration-200"
+          onClick={() => {
+            if (item.type === "folder") {
+              handleFolderClick(item as FolderItem);
+            }
+          }}
+        >
           <CardContent className="p-4">
             <div className="flex items-start justify-between mb-3">
               <div
@@ -346,44 +484,111 @@ export default function Home() {
                     variant="ghost"
                     className="h-8 w-8 p-0"
                     disabled={!!isLoading}
+                    onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                      e.stopPropagation();
+                    }}
                   >
                     <MoreVertical className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => handleDownload(item)}
-                    disabled={!!isLoading}
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    {isLoading === "download" ? "Downloading..." : "Download"}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => handleShare(item)}
-                    disabled={!!isLoading}
-                  >
-                    <Share2 className="w-4 h-4 mr-2" />
-                    Share
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      if (item.type !== "file") return;
-                      setEditFile(item as unknown as FileItem);
-                      setEditOpen(true);
-                    }}
-                    disabled={!!isLoading}
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled={!!isLoading}>
-                    <Star className="w-4 h-4 mr-2" />
-                    {meta.isStarred ? "Unstar" : "Star"}
-                  </DropdownMenuItem>
+                  {item.type === "file" && (
+                    <>
+                      <DropdownMenuItem
+                        onClick={(e: MouseEvent) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          handleDownload(item);
+                        }}
+                        disabled={!!isLoading}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        {isLoading === "download"
+                          ? "Downloading..."
+                          : "Download"}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e: MouseEvent) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          handleShare(item);
+                        }}
+                        disabled={!!isLoading}
+                      >
+                        <Share2 className="w-4 h-4 mr-2" />
+                        Share
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e: MouseEvent) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setEditFile(item as FileItem);
+                          setEditOpen(true);
+                        }}
+                        disabled={!!isLoading}
+                      >
+                        <Edit3 className="w-4 h-4 mr-2" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e: MouseEvent) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          openMoveModal(item);
+                        }}
+                        disabled={!!isLoading}
+                      >
+                        <Folder className="w-4 h-4 mr-2" />
+                        Move
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={!!isLoading}
+                        onClick={(e: MouseEvent) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                        }}
+                      >
+                        <Star className="w-4 h-4 mr-2" />
+                        {meta.isStarred ? "Unstar" : "Star"}
+                      </DropdownMenuItem>
+                    </>
+                  )}
+
+                  {item.type === "folder" && (
+                    <>
+                      <DropdownMenuItem
+                        onClick={(e: MouseEvent) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          handleEditFolder(item as FolderItem);
+                        }}
+                        disabled={!!isLoading}
+                      >
+                        <Edit3 className="w-4 h-4 mr-2" />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e: MouseEvent) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          openMoveModal(item);
+                        }}
+                        disabled={!!isLoading}
+                      >
+                        <Folder className="w-4 h-4 mr-2" />
+                        Move
+                      </DropdownMenuItem>
+                    </>
+                  )}
+
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="text-destructive"
-                    onClick={() => handleDelete(item)}
+                    onClick={(e: MouseEvent) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      openDeleteModal(item);
+                    }}
                     disabled={!!isLoading}
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
@@ -438,29 +643,43 @@ export default function Home() {
 
   return (
     <>
+      <Breadcrumb />
+
       <div className="flex items-center gap-4 p-4 bg-background border border-drive-border rounded-lg mb-6">
         <div className="flex-1 max-w-md">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search files and folders..."
+              placeholder={
+                isSearchDisabled
+                  ? "Search disabled in folder view"
+                  : "Search files and folders..."
+              }
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) =>
+                !isSearchDisabled && setSearchQuery(e.target.value)
+              }
               className="pl-10 drive-surface"
+              disabled={isSearchDisabled}
             />
-            {isSearching && (
+            {isSearching && !isSearchDisabled && (
               <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
             )}
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <FilterModal
-            filters={{ ...searchFilters, q: searchQuery }}
-            onFiltersChange={handleFiltersChange}
-            onReset={handleFiltersReset}
+          <CreateFolderDialog
+            parentFolderId={folderId}
+            onFolderCreated={handleFolderCreated}
           />
-
+          {!isSearchDisabled && (
+            <FilterModal
+              filters={{ ...searchFilters, q: searchQuery }}
+              onFiltersChange={handleFiltersChange}
+              onReset={handleFiltersReset}
+            />
+          )}{" "}
           <div className="flex items-center border border-drive-border rounded-lg">
             <Button
               variant={viewMode === "grid" ? "default" : "ghost"}
@@ -489,10 +708,12 @@ export default function Home() {
               <Folder className="w-8 h-8 text-muted-foreground" />
             </div>
             <h3 className="text-lg font-medium text-foreground mb-2">
-              No files found
+              {isInFolder ? "Folder is empty" : "No files found"}
             </h3>
             <p className="text-muted-foreground">
-              {searchQuery
+              {isInFolder
+                ? "This folder doesn't contain any files or subfolders yet"
+                : searchQuery
                 ? "Try adjusting your search terms"
                 : "Upload your first file to get started"}
             </p>
@@ -551,6 +772,83 @@ export default function Home() {
           setToastMessage("File updated");
         }}
       />
+
+      <FolderEditDialog
+        folder={editFolder}
+        open={folderEditOpen}
+        onOpenChange={setFolderEditOpen}
+        onFolderRenamed={handleFolderRenamed}
+      />
+
+      {/* Move modal */}
+      {moveTarget && (
+        <MoveModal
+          open={moveOpen}
+          onOpenChange={(o) => {
+            setMoveOpen(o);
+            if (!o) setMoveTarget(null);
+          }}
+          item={{
+            id: moveTarget.id,
+            name: moveTarget.name,
+            type: moveTarget.type,
+          }}
+          disabledFolderId={
+            moveTarget.type === "folder" ? moveTarget.id : undefined
+          }
+          onSelectDestination={async (dest) => {
+            try {
+              if (moveTarget.type === "file") {
+                await fileOperationsApi.moveFile(moveTarget.id, dest.id);
+              } else {
+                await folderOperationsApi.moveFolder(moveTarget.id, dest.id);
+              }
+              await loadData();
+              setToastMessage(`"${moveTarget.name}" moved to "${dest.name}"`);
+            } catch (e) {
+              console.error(e);
+              setToastMessage(e instanceof Error ? e.message : "Move failed");
+            }
+          }}
+        />
+      )}
+
+      {/* Delete confirmation modal */}
+      <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm delete</DialogTitle>
+            <DialogDescription>
+              {deleteTarget && deleteTarget.type === "folder" ? (
+                <>
+                  You're about to move the folder "{deleteTarget.name}" to the
+                  trash. This will soft-delete the folder and its subtree.
+                </>
+              ) : (
+                <>You're about to move "{deleteTarget?.name}" to the trash.</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 flex gap-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteModalOpen(false)}
+              disabled={!!(deleteTarget && loadingStates[deleteTarget.id])}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="text-destructive"
+              onClick={() => performDelete(deleteTarget)}
+              disabled={!!(deleteTarget && loadingStates[deleteTarget.id])}
+            >
+              {deleteTarget && loadingStates[deleteTarget.id] === "delete"
+                ? "Deleting..."
+                : "Delete"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Toast Notification */}
       {toastMessage && (
