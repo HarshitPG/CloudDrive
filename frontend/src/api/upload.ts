@@ -19,12 +19,45 @@ export type CreateSessionResponse = {
 export type CompleteRequest = {
   sessionId: string;
   clientSha256?: string;
+  folderId?: string;
 };
 
 export type CompleteResponse = {
   userFileId: string;
   contentId?: string;
   deduped: boolean;
+};
+
+export type FolderInitFile = {
+  path: string;
+  size: number;
+  mime?: string;
+  sha256?: string;
+};
+
+export type FolderInitRequest = {
+  parentId?: string;
+  rootName: string;
+  files: FolderInitFile[];
+  idempotencyKey?: string;
+};
+
+export type FolderInitFileResponse =
+  | { path: string; deduped: true; userFileId: string }
+  | {
+      path: string;
+      deduped: false;
+      sessionId: string;
+      uploadUrl: string;
+      tempBlobKey: string;
+      targetFolderId: string;
+    };
+
+export type FolderInitResponse = {
+  uploadId: string;
+  rootFolderId: string;
+  folders: Array<{ path: string; folderId: string }>;
+  files: FolderInitFileResponse[];
 };
 
 export class QuotaExceededError extends Error {
@@ -80,6 +113,13 @@ export async function completeUpload(
 ): Promise<CompleteResponse> {
   const res = await axios.post("/api/v1/uploads/complete", req);
   return res.data as CompleteResponse;
+}
+
+export async function initFolderUpload(
+  req: FolderInitRequest
+): Promise<FolderInitResponse> {
+  const res = await axios.post("/api/v1/uploads/folder/init", req);
+  return res.data as FolderInitResponse;
 }
 
 export async function abortUpload(sessionId: string): Promise<void> {

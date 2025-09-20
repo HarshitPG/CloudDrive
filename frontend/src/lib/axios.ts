@@ -14,26 +14,38 @@ const instance: AxiosInstance = axios.create({
   timeout: 15_000,
 });
 
+let refreshPromise: Promise<string | null> | null = null;
 async function refreshToken(): Promise<string | null> {
-  try {
-    const refreshAxios = axios.create({
-      baseURL: API_BASE,
-      withCredentials: true,
-      timeout: 10_000,
-    });
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      let token: string | null = null;
+      try {
+        const refreshAxios = axios.create({
+          baseURL: API_BASE,
+          withCredentials: true,
+          timeout: 10_000,
+        });
 
-    const res = await refreshAxios.post("/api/v1/auth/refresh");
-    const accessToken = res.data?.access_token;
+        const res = await refreshAxios.post("/api/v1/auth/refresh");
+        const accessToken = res.data?.access_token;
 
-    if (accessToken) {
-      setAccessToken(accessToken);
-      return accessToken;
-    }
-  } catch {
-    setAccessToken(null);
-    useAuthStore.getState().clearAuth();
+        if (accessToken) {
+          setAccessToken(accessToken);
+          token = accessToken;
+        }
+      } catch {
+        //
+      } finally {
+        if (!getAccessToken()) {
+          useAuthStore.getState().clearAuth();
+        }
+      }
+      const result = token;
+      refreshPromise = null;
+      return result;
+    })();
   }
-  return null;
+  return refreshPromise;
 }
 
 instance.interceptors.request.use(

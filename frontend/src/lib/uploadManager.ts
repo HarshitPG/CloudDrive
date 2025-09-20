@@ -27,6 +27,8 @@ export type UploadItem = {
   error?: string;
   sessionId?: string;
   sha256?: string;
+  uploadUrl?: string;
+  folderId?: string;
 };
 
 export type UploadListener = (items: UploadItem[]) => void;
@@ -67,6 +69,34 @@ class UploadManager {
       total: file.size,
     }));
     this.items = [...newItems, ...this.items];
+    if (this.items.length > 5) this.items = this.items.slice(0, 5);
+    this.emit();
+    this.pump();
+  }
+
+  // Add pre-initialized uploads (from folder init): already have sessionId, uploadUrl, and folderId
+  addPreparedUploads(
+    items: Array<{
+      file: File;
+      sessionId: string;
+      uploadUrl: string;
+      folderId: string;
+      sha256?: string;
+    }>
+  ) {
+    const prepared = items.map<UploadItem>((p) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      file: p.file,
+      status: "queued",
+      progress: 0,
+      loaded: 0,
+      total: p.file.size,
+      sessionId: p.sessionId,
+      uploadUrl: p.uploadUrl,
+      folderId: p.folderId,
+      sha256: p.sha256,
+    }));
+    this.items = [...prepared, ...this.items];
     if (this.items.length > 5) this.items = this.items.slice(0, 5);
     this.emit();
     this.pump();
@@ -130,47 +160,51 @@ class UploadManager {
 
   private async process(item: UploadItem) {
     try {
-      // compute SHA256 for small files (< 32MB)
-      let sha: string | undefined = undefined;
-      if (item.file.size > 0) {
-        // create an AbortController so we can cancel hashing if the user
-        // cancels while hashing
-        const hashCtrl = new AbortController();
-        this.abortControllers.set(item.id, hashCtrl);
-        this.updateItem(item.id, { status: "hashing" });
-        sha = await computeFileSHA256WithLimit(
-          item.file,
-          undefined,
-          ({ loaded, total }) => {
-            const percent = Math.min(99, (loaded / total) * 20);
-            this.updateItem(item.id, { progress: percent, loaded });
-          },
-          hashCtrl.signal
-        );
-        // If hashing finished and was not aborted, remove controller so upload
-        // step will create its own abort controller
-        this.abortControllers.delete(item.id);
-      }
+      // Branch: prepared upload (folder) vs standard single-file flow
+      let sha: string | undefined = item.sha256;
+      let sessionId: string | undefined = item.sessionId;
+      let uploadUrl: string | undefined = item.uploadUrl;
 
-      this.updateItem(item.id, { status: "creating" });
-      const session = await createSession({
-        filename: item.file.name,
-        declaredMime: item.file.type,
-        originalSize: item.file.size,
-        clientSha256: sha,
-      });
+      if (!sessionId || !uploadUrl) {
+        // Standard single-file flow: compute SHA and create session
+        if (item.file.size > 0) {
+          const hashCtrl = new AbortController();
+          this.abortControllers.set(item.id, hashCtrl);
+          this.updateItem(item.id, { status: "hashing" });
+          sha = await computeFileSHA256WithLimit(
+            item.file,
+            undefined,
+            ({ loaded, total }) => {
+              const percent = Math.min(99, (loaded / total) * 20);
+              this.updateItem(item.id, { progress: percent, loaded });
+            },
+            hashCtrl.signal
+          );
+          this.abortControllers.delete(item.id);
+        }
 
-      if (session.skipUpload) {
-        this.updateItem(item.id, {
-          status: "done",
-          progress: 100,
-          loaded: item.total,
+        this.updateItem(item.id, { status: "creating" });
+        const session = await createSession({
+          filename: item.file.name,
+          declaredMime: item.file.type,
+          originalSize: item.file.size,
+          clientSha256: sha,
         });
-        return;
-      }
 
-      if (!session.uploadUrl || !session.sessionId) {
-        throw new Error("Invalid upload session response");
+        if (session.skipUpload) {
+          this.updateItem(item.id, {
+            status: "done",
+            progress: 100,
+            loaded: item.total,
+          });
+          return;
+        }
+        if (!session.uploadUrl || !session.sessionId) {
+          throw new Error("Invalid upload session response");
+        }
+        sessionId = session.sessionId;
+        uploadUrl = session.uploadUrl;
+        this.updateItem(item.id, { sessionId });
       }
 
       const ctrl = new AbortController();
@@ -178,7 +212,7 @@ class UploadManager {
 
       this.updateItem(item.id, {
         status: "uploading",
-        sessionId: session.sessionId,
+        sessionId: sessionId,
       });
 
       let lastTime = Date.now();
@@ -186,7 +220,7 @@ class UploadManager {
 
       await uploadToPresignedUrl(
         item.file,
-        session.uploadUrl,
+        uploadUrl!,
         (p: UploadProgress) => {
           const now = Date.now();
           const dt = (now - lastTime) / 1000;
@@ -205,8 +239,9 @@ class UploadManager {
 
       this.updateItem(item.id, { status: "completing" });
       const completed = await completeUpload({
-        sessionId: session.sessionId,
+        sessionId: sessionId!,
         clientSha256: sha,
+        folderId: item.folderId,
       });
       if (completed?.userFileId) {
         this.updateItem(item.id, {

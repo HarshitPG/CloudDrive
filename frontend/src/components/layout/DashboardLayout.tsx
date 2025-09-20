@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import { useAuthStore } from "../../stores/auth";
 import QuotaWidget from "../QuotaWidget";
+import { UploadList } from "@/components/upload/UploadList";
 import SidebarToggle from "../ui/SidebarToggle";
 
 export default function DashboardLayout() {
@@ -20,6 +21,8 @@ export default function DashboardLayout() {
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
         </main>
+        {/* Global upload toaster */}
+        <UploadList />
       </div>
     </div>
   );

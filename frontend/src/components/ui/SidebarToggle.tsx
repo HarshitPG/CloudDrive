@@ -15,11 +15,13 @@ import { useNavigate, useLocation } from "react-router-dom";
 import QuotaWidget from "../QuotaWidget";
 import { uploadManager } from "@/lib/uploadManager";
 import { useRef } from "react";
+import { pickDirectoryFiles, enqueueFolderUploads } from "@/lib/folderUpload";
 
 export default function SidebarToggle() {
   const [isOpen, setIsOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleResize = () => {
@@ -76,20 +78,44 @@ export default function SidebarToggle() {
               }
             }}
           />
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className={`flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition hover:bg-sidebar-accent text-sidebar-foreground`}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ")
-                fileInputRef.current?.click();
-            }}
-          >
-            <div className="shrink-0">
-              <Upload size={20} />
-            </div>
-            {isOpen && !isMobile && <span className="truncate">Upload</span>}
+          <div className="relative">
+            <details className="group">
+              <summary
+                className={`flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition hover:bg-sidebar-accent text-sidebar-foreground list-none`}
+              >
+                <div className="shrink-0">
+                  <Upload size={20} />
+                </div>
+                {isOpen && !isMobile && (
+                  <span className="truncate">Upload</span>
+                )}
+              </summary>
+              <div className="absolute z-10 mt-1 w-44 rounded-md border border-sidebar-border bg-sidebar shadow-lg">
+                <button
+                  className="block w-full text-left px-3 py-2 text-sm hover:bg-sidebar-accent"
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  Upload files
+                </button>
+                <button
+                  className="block w-full text-left px-3 py-2 text-sm hover:bg-sidebar-accent"
+                  onClick={async () => {
+                    try {
+                      const { entries, rootName } = await pickDirectoryFiles();
+                      if (!entries.length) return;
+                      const res = await enqueueFolderUploads(rootName, entries);
+                      navigate(`/dashboard/home/folder/${res.rootFolderId}`);
+                    } catch (e) {
+                      //
+                    }
+                  }}
+                >
+                  Upload folder
+                </button>
+              </div>
+            </details>
           </div>
         </div>
 
