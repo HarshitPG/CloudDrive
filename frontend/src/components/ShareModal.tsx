@@ -19,6 +19,7 @@ import {
   folderOperationsApi,
   type CreatePublicShareRequest,
   type ShareToUserRequest,
+  type FolderShareResponse,
 } from "@/api/operations";
 
 export interface ShareModalProps {
@@ -53,6 +54,11 @@ export default function ShareModal({
     null
   );
 
+  const [folderShareOptions, setFolderShareOptions] = useState({
+    recursive: true,
+    snapshotMode: false,
+  });
+
   const [userShareData, setUserShareData] = useState<ShareToUserRequest>({
     targetUserId: "",
     permission: "read",
@@ -63,16 +69,26 @@ export default function ShareModal({
     setError(null);
 
     try {
-      const shareApi =
-        item.type === "file"
-          ? fileOperationsApi.createPublicFileShare
-          : folderOperationsApi.createPublicFolderShare;
-
-      const result = await shareApi(item.id, publicShareData);
-      const fullUrl = `${window.location.origin}${result.url}`;
-
-      setGeneratedShareUrl(fullUrl);
-      onShareSuccess?.(fullUrl);
+      if (item.type === "file") {
+        const result = await fileOperationsApi.createPublicFileShare(
+          item.id,
+          publicShareData
+        );
+        const fullUrl = `${window.location.origin}${result.url}`;
+        setGeneratedShareUrl(fullUrl);
+        onShareSuccess?.(fullUrl);
+      } else {
+        const result = await folderOperationsApi.createPublicFolderShare(
+          item.id,
+          {
+            ...publicShareData,
+            ...folderShareOptions,
+          }
+        );
+        const fullUrl = `${window.location.origin}/fs/${result.token}`;
+        setGeneratedShareUrl(fullUrl);
+        onShareSuccess?.(fullUrl);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create share");
     } finally {
@@ -256,6 +272,56 @@ export default function ShareModal({
                   Leave empty for permanent share
                 </p>
               </div>
+
+              {/* Folder-specific options */}
+              {item.type === "folder" && (
+                <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
+                  <h4 className="text-sm font-medium">Folder Share Options</h4>
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Label htmlFor="recursive">Include Subfolders</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Share all files and folders inside this folder
+                      </p>
+                    </div>
+                    <input
+                      id="recursive"
+                      type="checkbox"
+                      checked={folderShareOptions.recursive}
+                      onChange={(e) =>
+                        setFolderShareOptions({
+                          ...folderShareOptions,
+                          recursive: e.target.checked,
+                        })
+                      }
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Label htmlFor="snapshot">Snapshot Mode</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Create a fixed snapshot for large folders (better
+                        performance)
+                      </p>
+                    </div>
+                    <input
+                      id="snapshot"
+                      type="checkbox"
+                      checked={folderShareOptions.snapshotMode}
+                      onChange={(e) =>
+                        setFolderShareOptions({
+                          ...folderShareOptions,
+                          snapshotMode: e.target.checked,
+                        })
+                      }
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                  </div>
+                </div>
+              )}
 
               {generatedShareUrl && (
                 <motion.div

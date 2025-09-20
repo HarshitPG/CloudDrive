@@ -571,6 +571,17 @@ export default function Home() {
                         onClick={(e: MouseEvent) => {
                           e.stopPropagation();
                           e.preventDefault();
+                          handleShare(item);
+                        }}
+                        disabled={!!isLoading}
+                      >
+                        <Share2 className="w-4 h-4 mr-2" />
+                        Share
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e: MouseEvent) => {
+                          e.stopPropagation();
+                          e.preventDefault();
                           openMoveModal(item);
                         }}
                         disabled={!!isLoading}
@@ -798,13 +809,16 @@ export default function Home() {
           }
           onSelectDestination={async (dest) => {
             try {
+              const targetId = dest?.id || null;
+              const targetName = dest?.name || "Home";
+
               if (moveTarget.type === "file") {
-                await fileOperationsApi.moveFile(moveTarget.id, dest.id);
+                await fileOperationsApi.moveFile(moveTarget.id, targetId);
               } else {
-                await folderOperationsApi.moveFolder(moveTarget.id, dest.id);
+                await folderOperationsApi.moveFolder(moveTarget.id, targetId);
               }
               await loadData();
-              setToastMessage(`"${moveTarget.name}" moved to "${dest.name}"`);
+              setToastMessage(`"${moveTarget.name}" moved to "${targetName}"`);
             } catch (e) {
               console.error(e);
               setToastMessage(e instanceof Error ? e.message : "Move failed");

@@ -16,8 +16,6 @@ import DashboardLayout from "./components/layout/DashboardLayout";
 export default function App() {
   return (
     <Routes>
-      <Route path="/s/:token" element={<PublicShareView />} />
-
       <Route
         path="/dashboard"
         element={
@@ -39,6 +37,7 @@ export default function App() {
       <Route path="/verify-email" element={<VerifyPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/fs/:token" element={<PublicShareView />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

@@ -1,37 +1,29 @@
-import React, { useEffect, useState } from "react";
-import { useParams, Navigate } from "react-router-dom";
+import React, { useEffect, useState, useCallback } from "react";
+import { useParams, Navigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import axios from "@/lib/axios";
 import { Button } from "@/components/ui/button";
 import { downloadUrlToFile } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Download,
   FileText,
   Music,
   Video,
-  Image,
+  Image as ImageIcon,
   FileArchive,
+  Folder,
+  ArrowLeft,
+  Home,
+  ChevronRight,
+  Archive,
+  Loader2,
 } from "lucide-react";
-
-type FileShareResp = {
-  type: "file";
-  fileId: string;
-  filename: string;
-  size: number;
-  download: string;
-};
-
-type FolderFile = {
-  id: string;
-  filename: string;
-  size: number;
-  download: string;
-};
-
-type FolderShareResp = { type: "folder"; files: FolderFile[] };
-
-type ShareResp = FileShareResp | FolderShareResp;
+import {
+  publicShareApi,
+  type SharedFolderData,
+  type SharedFolderItem,
+} from "@/api/operations";
 
 const getFileType = (filename: string): string => {
   const ext = filename.toLowerCase().split(".").pop() || "";
@@ -49,206 +41,271 @@ const getFileType = (filename: string): string => {
   return "unknown";
 };
 
-const FilePreview: React.FC<{
-  filename: string;
-  downloadUrl: string;
-  size: number;
-}> = ({ filename, downloadUrl, size }) => {
+const getFileIcon = (filename: string) => {
   const fileType = getFileType(filename);
-  const [previewError, setPreviewError] = useState(false);
+
+  switch (fileType) {
+    case "image":
+      return ImageIcon;
+    case "video":
+      return Video;
+    case "audio":
+      return Music;
+    case "archive":
+      return Archive;
+    default:
+      return FileText;
+  }
+};
+
+const formatBytes = (bytes?: number) => {
+  if (!bytes) return "-";
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + " " + sizes[i];
+};
+
+const formatDate = (dateString?: string) => {
+  if (!dateString) return "-";
+  return new Date(dateString).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
+
+// Breadcrumb component for navigation
+const Breadcrumb: React.FC<{
+  breadcrumbPath: { id: string; name: string }[];
+  rootFolderName: string;
+  onNavigate: (folderId?: string) => void;
+}> = ({ breadcrumbPath, rootFolderName, onNavigate }) => {
+  return (
+    <div className="flex items-center gap-1 text-sm text-muted-foreground mb-4">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => onNavigate()}
+        className="h-auto p-1 text-muted-foreground hover:text-foreground"
+      >
+        <Home className="w-4 h-4 mr-1" />
+        {rootFolderName}
+      </Button>
+      {breadcrumbPath.map((segment, index) => (
+        <React.Fragment key={segment.id}>
+          <ChevronRight className="w-4 h-4" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onNavigate(segment.id)}
+            className="h-auto p-1 text-muted-foreground hover:text-foreground"
+          >
+            {segment.name}
+          </Button>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
+
+const ItemCard: React.FC<{
+  item: SharedFolderItem;
+  token: string;
+  onFolderClick: (folderId: string, folderName: string) => void;
+}> = ({ item, token, onFolderClick }) => {
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const renderPreview = () => {
-    if (previewError) {
-      return (
-        <div className="bg-muted rounded-lg p-8 text-center">
-          <FileText className="w-12 h-12 mx-auto mb-2 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Preview not available</p>
-        </div>
-      );
-    }
+  const IconComponent =
+    item.type === "folder" ? Folder : getFileIcon(item.name);
 
-    switch (fileType) {
-      case "image":
-        return (
-          <div className="bg-muted rounded-lg p-4">
-            <img
-              src={downloadUrl}
-              alt={filename}
-              className="max-w-full max-h-96 mx-auto rounded"
-              onError={() => setPreviewError(true)}
-            />
-          </div>
+  const handleDownload = async () => {
+    if (item.type === "file" && item.downloadUrl) {
+      try {
+        setIsDownloading(true);
+        await downloadUrlToFile(item.downloadUrl, item.name);
+      } catch (err) {
+        console.error("Programmatic download failed, falling back:", err);
+        window.open(item.downloadUrl, "_blank", "noopener,noreferrer");
+      } finally {
+        setIsDownloading(false);
+      }
+    } else if (item.type === "file") {
+      try {
+        setIsDownloading(true);
+        const downloadUrl = await publicShareApi.downloadFromShare(
+          token,
+          item.id
         );
-
-      case "video":
-        return (
-          <div className="bg-muted rounded-lg p-4">
-            <video
-              controls
-              className="max-w-full max-h-96 mx-auto rounded"
-              onError={() => setPreviewError(true)}
-            >
-              <source src={downloadUrl} />
-              Your browser does not support video playback.
-            </video>
-          </div>
-        );
-
-      case "audio":
-        return (
-          <div className="bg-muted rounded-lg p-8 text-center">
-            <Music className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-            <audio
-              controls
-              className="w-full max-w-md mx-auto"
-              onError={() => setPreviewError(true)}
-            >
-              <source src={downloadUrl} />
-              Your browser does not support audio playback.
-            </audio>
-          </div>
-        );
-
-      case "pdf":
-        return (
-          <div className="bg-muted rounded-lg p-4">
-            <iframe
-              src={downloadUrl}
-              className="w-full h-96 rounded"
-              title={filename}
-              onError={() => setPreviewError(true)}
-            />
-          </div>
-        );
-
-      case "text":
-        return (
-          <div className="bg-muted rounded-lg p-8 text-center">
-            <FileText className="w-12 h-12 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground mb-4">
-              Text file preview
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Download to view contents
-            </p>
-          </div>
-        );
-
-      case "office":
-        return (
-          <div className="bg-muted rounded-lg p-8 text-center">
-            <FileText className="w-12 h-12 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground mb-4">
-              Office document
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Download to view in your preferred application
-            </p>
-          </div>
-        );
-
-      case "archive":
-        return (
-          <div className="bg-muted rounded-lg p-8 text-center">
-            <FileArchive className="w-12 h-12 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground mb-4">Archive file</p>
-            <p className="text-xs text-muted-foreground">
-              Download to extract contents
-            </p>
-          </div>
-        );
-
-      default:
-        return (
-          <div className="bg-muted rounded-lg p-8 text-center">
-            <FileText className="w-12 h-12 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              No preview available
-            </p>
-          </div>
-        );
+        await downloadUrlToFile(downloadUrl, item.name);
+      } catch (err) {
+        console.error("Failed to download file:", err);
+      } finally {
+        setIsDownloading(false);
+      }
     }
   };
 
   return (
-    <div className="space-y-4">
-      {renderPreview()}
-      <div className="flex items-center justify-between p-4 bg-background border rounded-lg">
-        <div>
-          <h3 className="font-medium">{filename}</h3>
-          <p className="text-sm text-muted-foreground">
-            {Math.round(size / 1024)} KB • {fileType}
-          </p>
-        </div>
-        <div className="inline-block">
-          <Button
-            onClick={async () => {
-              try {
-                setIsDownloading(true);
-                await downloadUrlToFile(downloadUrl, filename);
-              } catch (err) {
-                // If fetch/save fails (CORS, network), fallback to opening the URL
-                // in a new tab so user can still download via the presigned link.
-                // eslint-disable-next-line no-console
-                console.error(
-                  "Programmatic download failed, falling back:",
-                  err
-                );
-                window.open(downloadUrl, "_blank", "noopener,noreferrer");
-              } finally {
-                setIsDownloading(false);
-              }
-            }}
-            disabled={isDownloading}
+    <Card
+      className="drive-card cursor-pointer transition-all duration-200"
+      onClick={() => {
+        if (item.type === "folder") {
+          onFolderClick(item.id, item.name);
+        }
+      }}
+    >
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between mb-3">
+          <div
+            className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+              item.type === "folder"
+                ? "bg-primary/10 text-primary"
+                : "bg-muted text-muted-foreground"
+            }`}
           >
-            <Download className="w-4 h-4 mr-2" />
-            {isDownloading ? "Downloading..." : "Download"}
-          </Button>
+            {isDownloading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <IconComponent className="w-5 h-5" />
+            )}
+          </div>
+          {item.type === "file" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDownload();
+              }}
+              disabled={isDownloading}
+              className="h-8 w-8 p-0"
+            >
+              <Download className="w-4 h-4" />
+            </Button>
+          )}
         </div>
-      </div>
-    </div>
+
+        <h3 className="font-medium text-foreground text-sm mb-2 truncate">
+          {item.name}
+        </h3>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              {item.type === "folder" ? "Folder" : getFileType(item.name)}
+            </span>
+            <span>{formatBytes(item.size)}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-xs">
+              {item.mimeType || "Unknown"}
+            </Badge>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 
 export default function PublicShareView() {
   const { token } = useParams<{ token: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<ShareResp | null>(null);
+  const [data, setData] = useState<SharedFolderData | null>(null);
+  const [allItems, setAllItems] = useState<SharedFolderItem[]>([]);
+  const [currentItems, setCurrentItems] = useState<SharedFolderItem[]>([]);
+  const [breadcrumbPath, setBreadcrumbPath] = useState<
+    { id: string; name: string }[]
+  >([]);
 
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
+  const currentFolderId = searchParams.get("folderId");
 
-    const fetchShare = async () => {
+  const buildBreadcrumbPath = useCallback(
+    (
+      targetFolderId: string,
+      items: SharedFolderItem[],
+      rootFolderId: string
+    ) => {
+      const path: { id: string; name: string }[] = [];
+      let currentId = targetFolderId;
+
+      while (currentId && currentId !== rootFolderId) {
+        const folder = items.find(
+          (item) => item.id === currentId && item.type === "folder"
+        );
+        if (folder) {
+          path.unshift({ id: folder.id, name: folder.name });
+          currentId = folder.parentId || "";
+        } else {
+          break;
+        }
+      }
+
+      setBreadcrumbPath(path);
+    },
+    []
+  );
+
+  const fetchFolderData = useCallback(
+    async (folderId?: string) => {
+      if (!token) return;
+
       setLoading(true);
       setError(null);
+
       try {
-        const res = await axios.get(`/api/v1/s/${token}`);
-        if (!cancelled) {
-          setData(res.data as ShareResp);
+        const result = await publicShareApi.resolveFolderShare(token, folderId);
+        setData(result);
+        setAllItems(result.items);
+
+        const filteredItems = result.items.filter((item) => {
+          if (!folderId) {
+            return item.parentId === result.share.folderId;
+          } else {
+            return item.parentId === folderId;
+          }
+        });
+
+        setCurrentItems(filteredItems);
+
+        if (!folderId) {
+          setBreadcrumbPath([]);
+        } else {
+          buildBreadcrumbPath(folderId, result.items, result.share.folderId);
         }
       } catch (err: unknown) {
-        if (!cancelled) {
-          const respStatus = (err as { response?: { status?: number } })
-            ?.response?.status;
-          const message = (err as { message?: string })?.message;
-          if (respStatus === 404) setError("Share not found");
-          else if (respStatus === 410) setError("Share expired");
-          else setError(message || "Failed to load share");
-        }
+        const message =
+          (err as { message?: string })?.message ||
+          "Failed to load shared folder";
+        setError(message);
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
-    };
+    },
+    [token, buildBreadcrumbPath]
+  );
 
-    fetchShare();
+  useEffect(() => {
+    fetchFolderData(currentFolderId || undefined);
+  }, [fetchFolderData, currentFolderId]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+  const handleNavigateToFolder = (folderId: string, folderName: string) => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set("folderId", folderId);
+    setSearchParams(newParams);
+  };
+
+  const handleBreadcrumbNavigation = (folderId?: string) => {
+    const newParams = new URLSearchParams(searchParams);
+    if (folderId) {
+      newParams.set("folderId", folderId);
+    } else {
+      newParams.delete("folderId");
+    }
+    setSearchParams(newParams);
+  };
 
   if (!token) return <Navigate to="/" replace />;
 
@@ -257,61 +314,157 @@ export default function PublicShareView() {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
-      className="max-w-3xl mx-auto p-6"
+      className="max-w-7xl mx-auto p-6"
     >
       {loading ? (
-        <div className="text-center py-12">Loading...</div>
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Loading shared folder...</p>
+        </div>
       ) : error ? (
         <div className="text-center py-12">
           <h2 className="text-xl font-semibold mb-2">{error}</h2>
-          <p className="text-muted-foreground">Unable to open shared item.</p>
+          <p className="text-muted-foreground">Unable to open shared folder.</p>
+          <Button
+            onClick={() => fetchFolderData(currentFolderId || undefined)}
+            className="mt-4"
+            variant="outline"
+          >
+            Try Again
+          </Button>
         </div>
       ) : data ? (
         <div className="space-y-6">
-          {data.type === "file" ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="w-5 h-5" />
-                  Shared File
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <FilePreview
-                  filename={data.filename}
-                  downloadUrl={data.download}
-                  size={data.size}
-                />
-              </CardContent>
-            </Card>
-          ) : data.type === "folder" ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Shared Folder</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {data.files && data.files.length > 0 ? (
-                    data.files.map((f) => (
-                      <div key={f.id} className="space-y-4">
-                        <FilePreview
-                          filename={f.filename}
-                          downloadUrl={f.download}
-                          size={f.size}
-                        />
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-muted-foreground py-6 text-center">
-                      No files in this folder
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="text-center">Unsupported share type</div>
+          {/* Header with folder info */}
+          <div className="flex items-center gap-4 p-4 bg-background border border-drive-border rounded-lg">
+            <div className="flex-1">
+              <h1 className="text-2xl font-semibold flex items-center gap-2">
+                <Folder className="w-6 h-6 text-primary" />
+                {data.share.title || data.share.folderName || "Shared Folder"}
+              </h1>
+              {data.share.description && (
+                <p className="text-muted-foreground mt-1">
+                  {data.share.description}
+                </p>
+              )}
+              <div className="flex gap-2 mt-2">
+                {data.share.snapshotMode && (
+                  <Badge variant="outline" className="text-xs">
+                    Snapshot mode
+                  </Badge>
+                )}
+                {/* Download folder button */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const blob = await publicShareApi.downloadFolderArchive(
+                        token!,
+                        (downloaded, total) => {
+                          console.debug("download progress", downloaded, total);
+                        }
+                      );
+                      const filename = `${
+                        data.share.folderName || "shared"
+                      }.zip`;
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = filename;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      URL.revokeObjectURL(url);
+                    } catch (err) {
+                      console.error("Folder download failed", err);
+                      window.open(`/api/v1/fs/${token}/download`, "_blank");
+                    }
+                  }}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download Folder
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Breadcrumb navigation */}
+          <Breadcrumb
+            breadcrumbPath={breadcrumbPath}
+            rootFolderName={data.share.folderName || "Shared Folder"}
+            onNavigate={handleBreadcrumbNavigation}
+          />
+
+          {/* Back button for navigation */}
+          {currentFolderId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (breadcrumbPath.length > 1) {
+                  const parentFolderId =
+                    breadcrumbPath[breadcrumbPath.length - 2]?.id;
+                  handleBreadcrumbNavigation(parentFolderId);
+                } else {
+                  handleBreadcrumbNavigation();
+                }
+              }}
+              className="mb-4"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
           )}
+
+          {/* Items grid with Dashboard styling */}
+          <div className="space-y-4">
+            {/* Items count */}
+            {currentItems && currentItems.length > 0 && (
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {currentItems.length} item
+                  {currentItems.length !== 1 ? "s" : ""}(
+                  {currentItems.filter((item) => item.type === "folder").length}{" "}
+                  folder
+                  {currentItems.filter((item) => item.type === "folder")
+                    .length !== 1
+                    ? "s"
+                    : ""}
+                  , {currentItems.filter((item) => item.type === "file").length}{" "}
+                  file
+                  {currentItems.filter((item) => item.type === "file")
+                    .length !== 1
+                    ? "s"
+                    : ""}
+                  )
+                </p>
+              </div>
+            )}
+
+            {currentItems && currentItems.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {currentItems.map((item) => (
+                  <ItemCard
+                    key={item.id}
+                    item={item}
+                    token={token}
+                    onFolderClick={handleNavigateToFolder}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Folder className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <h3 className="text-lg font-medium mb-2">
+                  This folder is empty
+                </h3>
+                <p className="text-muted-foreground">
+                  No files or folders to display
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       ) : null}
     </motion.div>

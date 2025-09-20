@@ -1,4 +1,5 @@
 import axios from "../lib/axios";
+import type { AxiosProgressEvent } from "axios";
 
 export interface DownloadResponse {
   downloadUrl: string;
@@ -19,6 +20,65 @@ export interface CreatePublicShareRequest {
   title?: string;
   description?: string;
   expiresAt?: string;
+}
+
+// Folder share specific types
+export interface CreateFolderShareRequest {
+  folderId: string;
+  title?: string;
+  description?: string;
+  recursive?: boolean;
+  snapshotMode?: boolean;
+  expiresAt?: string;
+}
+
+export interface FolderShareResponse {
+  shareId: string;
+  token: string;
+  url: string;
+}
+
+export interface FolderShareInfo {
+  id: string;
+  folderId: string;
+  token: string;
+  title: string;
+  description: string;
+  recursive: boolean;
+  snapshotMode: boolean;
+  expiresAt?: string;
+  createdAt: string;
+  url: string;
+}
+
+export interface SharedFolderItem {
+  id: string;
+  name: string;
+  type: "file" | "folder";
+  size?: number;
+  mimeType?: string;
+  path: string;
+  parentId?: string;
+  downloadUrl?: string;
+}
+
+export interface SharedFolderData {
+  share: {
+    id: string;
+    token: string;
+    url: string;
+    folderId: string;
+    folderName: string;
+    title: string;
+    description: string;
+    recursive: boolean;
+    snapshotMode: boolean;
+    expiresAt?: string;
+    createdAt: string;
+  };
+  items: SharedFolderItem[];
+  total: number;
+  hasMore: boolean;
 }
 
 export interface ShareUserInfo {
@@ -148,10 +208,10 @@ export const fileOperationsApi = {
   },
 
   // Move a file to a different folder
-  async moveFile(fileId: string, targetFolderId: string): Promise<void> {
+  async moveFile(fileId: string, targetFolderId: string | null): Promise<void> {
     try {
       await axios.post(`/api/v1/files/${fileId}/move`, {
-        targetFolderId,
+        targetFolderId: targetFolderId || "",
       });
     } catch (error) {
       throw new Error(
@@ -179,21 +239,54 @@ export const folderOperationsApi = {
     }
   },
 
-  // Create a public share for a folder
-
+  // Create a public share for a folder using new folder share API
   async createPublicFolderShare(
     folderId: string,
-    shareData: CreatePublicShareRequest = {}
-  ): Promise<ShareResponse> {
+    shareData: CreatePublicShareRequest & {
+      recursive?: boolean;
+      snapshotMode?: boolean;
+    } = {}
+  ): Promise<FolderShareResponse> {
     try {
-      const response = await axios.post(
-        `/api/v1/shares/folders/${folderId}/share`,
-        shareData
-      );
+      const response = await axios.post(`/api/v1/folder-shares`, {
+        folderId,
+        title: shareData.title,
+        description: shareData.description,
+        recursive: shareData.recursive || false,
+        snapshotMode: shareData.snapshotMode || false,
+        expiresAt: shareData.expiresAt,
+      });
       return response.data;
     } catch (error) {
       throw new Error(
-        `Failed to create public folder share: ${
+        `Failed to create folder share: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  },
+
+  // Get folder share information
+  async getFolderShareInfo(shareId: string): Promise<FolderShareInfo> {
+    try {
+      const response = await axios.get(`/api/v1/folder-shares/${shareId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(
+        `Failed to get folder share info: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  },
+
+  // Revoke a folder share
+  async revokeFolderShare(shareId: string): Promise<void> {
+    try {
+      await axios.delete(`/api/v1/folder-shares/${shareId}`);
+    } catch (error) {
+      throw new Error(
+        `Failed to revoke folder share: ${
           error instanceof Error ? error.message : "Unknown error"
         }`
       );
@@ -201,14 +294,83 @@ export const folderOperationsApi = {
   },
 
   // Move a folder under a different parent folder
-  async moveFolder(folderId: string, targetParentId: string): Promise<void> {
+  async moveFolder(
+    folderId: string,
+    targetParentId: string | null
+  ): Promise<void> {
     try {
       await axios.post(`/api/v1/folders/${folderId}/move`, {
-        targetParentId,
+        targetParentId: targetParentId || "",
       });
     } catch (error) {
       throw new Error(
         `Failed to move folder: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  },
+};
+
+// Public share resolution API
+export const publicShareApi = {
+  // Resolve a shared folder by token
+  async resolveFolderShare(
+    token: string,
+    folderId?: string
+  ): Promise<SharedFolderData> {
+    try {
+      const url = folderId
+        ? `/api/v1/fs/${token}?folderId=${folderId}`
+        : `/api/v1/fs/${token}`;
+      const response = await axios.get(url);
+      return response.data;
+    } catch (error) {
+      throw new Error(
+        `Failed to resolve shared folder: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  },
+
+  // Download a file from a shared folder
+  async downloadFromShare(token: string, fileId: string): Promise<string> {
+    try {
+      const response = await axios.get(
+        `/api/v1/fs/${token}/download/${fileId}`
+      );
+      return response.data.downloadUrl;
+    } catch (error) {
+      throw new Error(
+        `Failed to get download URL: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  },
+
+  // Download the entire shared folder as a ZIP archive.
+  async downloadFolderArchive(
+    token: string,
+    onProgress?: (downloaded: number, total: number) => void
+  ): Promise<Blob> {
+    const url = `/api/v1/fs/${token}/download`;
+    try {
+      const response = await axios.get(url, {
+        responseType: "blob",
+        onDownloadProgress: (progressEvent: AxiosProgressEvent) => {
+          if (!onProgress || !progressEvent) return;
+          const loaded = (progressEvent.loaded as number) || 0;
+          const total = (progressEvent.total as number) || 0;
+          onProgress(loaded, total);
+        },
+      });
+
+      return response.data as Blob;
+    } catch (error) {
+      throw new Error(
+        `Failed to download folder archive: ${
           error instanceof Error ? error.message : "Unknown error"
         }`
       );
