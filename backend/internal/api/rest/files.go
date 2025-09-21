@@ -24,7 +24,7 @@ func RegisterFileRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorag
 	files.Use(auth.RequireAuth(jwtSecret))
 	producer := worker.NewProducer()
 	h := &fileHandler{db: db, storage: st, cache: cache, publish: publish, producer: producer}
-	files.GET("", h.listFiles)
+	files.GET("", h.listFilesPrimary)
 	files.GET("/:id", h.getFileMetadata)
 	files.GET("/:id/download", h.download)
 	files.DELETE("/:id", h.delete)
@@ -614,6 +614,103 @@ func (h *fileHandler) listFiles(c *gin.Context) {
             WHERE uf.user_id=$1 AND uf.folder_id IS NULL AND uf.deleted_at IS NULL
             ORDER BY uf.created_at DESC
         `, userID)
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+	defer rows.Close()
+
+	files := []map[string]interface{}{}
+	for rows.Next() {
+		var id, filename, mime, contentHash string
+		var size, contentSize, refCount, downloadCount int64
+		var createdAt, updatedAt string
+		var deletedAt sql.NullTime
+		if deleted {
+			if err := rows.Scan(&id, &filename, &mime, &size,
+				&createdAt, &updatedAt, &downloadCount,
+				&contentHash, &contentSize, &refCount,
+				&deletedAt); err != nil {
+				continue
+			}
+		} else {
+			if err := rows.Scan(&id, &filename, &mime, &size,
+				&createdAt, &updatedAt, &downloadCount,
+				&contentHash, &contentSize, &refCount); err != nil {
+				continue
+			}
+		}
+		item := map[string]interface{}{
+			"id":            id,
+			"filename":      filename,
+			"mime":          mime,
+			"size":          size,
+			"createdAt":     createdAt,
+			"updatedAt":     updatedAt,
+			"downloadCount": downloadCount,
+			"contentHash":   contentHash,
+			"physicalSize":  contentSize,
+			"refCount":      refCount,
+			"dedupSavings":  size - contentSize,
+		}
+		if deleted && deletedAt.Valid {
+			item["deletedAt"] = deletedAt.Time
+		}
+		files = append(files, item)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"files": files})
+}
+
+// listFilesPrimary returns only primary files: files whose folder is NULL or whose parent folder is not in trash.
+// It preserves the existing 'deleted' parameter behavior for listing trash.
+func (h *fileHandler) listFilesPrimary(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	folderID := c.Query("folderId")
+	deleted := c.Query("deleted") == "true"
+
+	var rows *sql.Rows
+	var err error
+	if deleted {
+		// List trashed files but only those whose parent folder is NULL or parent folder is NOT soft-deleted
+		rows, err = h.db.QueryContext(c.Request.Context(), `
+			SELECT uf.id, uf.filename, uf.declared_mime, uf.original_size_bytes,
+				   uf.created_at, uf.updated_at, uf.download_count,
+				   fc.content_hash, fc.size_bytes, fc.ref_count,
+				   uf.deleted_at
+			FROM user_files uf
+			JOIN file_contents fc ON uf.content_id = fc.id
+			LEFT JOIN folders f ON uf.folder_id = f.id
+			WHERE uf.user_id=$1 AND uf.deleted_at IS NOT NULL
+			  AND (uf.folder_id IS NULL OR f.deleted_at IS NULL)
+			ORDER BY uf.deleted_at DESC
+		`, userID)
+	} else if folderID != "" {
+		// List files in a specific folder only if that folder is not soft-deleted
+		rows, err = h.db.QueryContext(c.Request.Context(), `
+			SELECT uf.id, uf.filename, uf.declared_mime, uf.original_size_bytes,
+				   uf.created_at, uf.updated_at, uf.download_count,
+				   fc.content_hash, fc.size_bytes, fc.ref_count
+			FROM user_files uf
+			JOIN file_contents fc ON uf.content_id = fc.id
+			JOIN folders f ON uf.folder_id = f.id
+			WHERE uf.user_id=$1 AND uf.folder_id=$2 AND uf.deleted_at IS NULL AND f.deleted_at IS NULL
+			ORDER BY uf.created_at DESC
+		`, userID, folderID)
+	} else {
+		// List root (primary) files: folder_id IS NULL and not deleted
+		rows, err = h.db.QueryContext(c.Request.Context(), `
+			SELECT uf.id, uf.filename, uf.declared_mime, uf.original_size_bytes,
+				   uf.created_at, uf.updated_at, uf.download_count,
+				   fc.content_hash, fc.size_bytes, fc.ref_count
+			FROM user_files uf
+			JOIN file_contents fc ON uf.content_id = fc.id
+			LEFT JOIN folders f ON uf.folder_id = f.id
+			WHERE uf.user_id=$1 AND uf.folder_id IS NULL AND uf.deleted_at IS NULL
+			ORDER BY uf.created_at DESC
+		`, userID)
 	}
 
 	if err != nil {

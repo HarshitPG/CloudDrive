@@ -8,16 +8,18 @@ import (
 	"backend/internal/auth"
 	"backend/internal/cache"
 	"backend/internal/worker"
+	"backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
-func RegisterFolderRoutes(rg *gin.RouterGroup, db *sql.DB, jwtSecret string) {
+func RegisterFolderRoutes(rg *gin.RouterGroup, db *sql.DB, jwtSecret string, c cache.Cache) {
 	folders := rg.Group("/folders")
 	folders.Use(auth.RequireAuth(jwtSecret))
-	h := &folderHandler{db: db, producer: worker.NewProducer()}
+	h := &folderHandler{db: db, cache: c, producer: worker.NewProducer()}
 
-	folders.GET("", h.list)
+	folders.GET("", h.listPrimary)
 	folders.POST("", h.create)
 	folders.GET("/:id/contents", h.listContents)
 	folders.GET("/:id/files", h.listFilesInFolder)
@@ -119,6 +121,111 @@ func (h *folderHandler) list(c *gin.Context) {
 	})
 }
 
+// listPrimary returns only primary folders: folders whose parent is NULL or whose parent folder is not in trash.
+// It supports pagination and the 'deleted' flag to list trashed folders that are primary.
+func (h *folderHandler) listPrimary(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	parentID := c.Query("parentId")
+	deleted := c.Query("deleted") == "true"
+
+	limit := 20
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	offset := 0
+	if v := c.Query("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			offset = n
+		}
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > 100000 {
+		offset = 100000
+	}
+
+	var rows *sql.Rows
+	var err error
+
+	if deleted {
+		// list trashed folders but only those whose parent is NULL or parent is not trashed
+		rows, err = h.db.QueryContext(c.Request.Context(), `
+			SELECT f.id, f.name, f.created_at, f.updated_at, f.deleted_at
+			FROM folders f
+			LEFT JOIN folders p ON f.parent_id = p.id
+			WHERE f.user_id = $1 AND f.deleted_at IS NOT NULL
+			  AND (f.parent_id IS NULL OR p.deleted_at IS NULL)
+			ORDER BY f.deleted_at DESC
+			LIMIT $2 OFFSET $3
+		`, userID, limit, offset)
+	} else if parentID == "" {
+		// root primary folders
+		rows, err = h.db.QueryContext(c.Request.Context(), `
+			SELECT f.id, f.name, f.created_at, f.updated_at
+			FROM folders f
+			WHERE f.user_id = $1 AND f.parent_id IS NULL AND f.deleted_at IS NULL
+			ORDER BY f.created_at DESC
+			LIMIT $2 OFFSET $3
+		`, userID, limit, offset)
+	} else {
+		// list children of a parent only if parent is not trashed
+		rows, err = h.db.QueryContext(c.Request.Context(), `
+			SELECT f.id, f.name, f.created_at, f.updated_at
+			FROM folders f
+			JOIN folders p ON f.parent_id = p.id
+			WHERE f.user_id = $1 AND f.parent_id = $2 AND f.deleted_at IS NULL AND p.deleted_at IS NULL
+			ORDER BY f.created_at DESC
+			LIMIT $3 OFFSET $4
+		`, userID, parentID, limit, offset)
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+	defer rows.Close()
+
+	out := make([]map[string]interface{}, 0, limit)
+	for rows.Next() {
+		var id, name, createdAt, updatedAt string
+		var deletedAt sql.NullTime
+		if deleted {
+			if err := rows.Scan(&id, &name, &createdAt, &updatedAt, &deletedAt); err != nil {
+				continue
+			}
+		} else {
+			if err := rows.Scan(&id, &name, &createdAt, &updatedAt); err != nil {
+				continue
+			}
+		}
+		item := map[string]interface{}{
+			"id":        id,
+			"name":      name,
+			"createdAt": createdAt,
+			"updatedAt": updatedAt,
+		}
+		if deleted && deletedAt.Valid {
+			item["deletedAt"] = deletedAt.Time
+		}
+		out = append(out, item)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"folders": out,
+		"page":    gin.H{"limit": limit, "offset": offset},
+	})
+}
+
 func (h *folderHandler) create(c *gin.Context) {
 	userID := auth.GetUserIDFromCtx(c.Request.Context())
 	var req createFolderRequest
@@ -126,103 +233,152 @@ func (h *folderHandler) create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	_, err := h.db.ExecContext(c.Request.Context(),
-		`INSERT INTO folders (id, user_id, parent_id, name, created_at, updated_at)
-         VALUES (gen_random_uuid(), $1, NULLIF($2,'')::uuid, $3, now(), now())`,
-		userID, req.ParentID, req.Name,
-	)
+
+	var newID string
+	err := h.db.QueryRowContext(c.Request.Context(), `
+		INSERT INTO folders (id, user_id, parent_id, name, created_at, updated_at)
+		VALUES (gen_random_uuid(), $1, NULLIF($2,'')::uuid, $3, now(), now())
+		RETURNING id
+	`, userID, req.ParentID, req.Name).Scan(&newID)
 	if err != nil {
+		logger.L.Error("folders.create: insert failed", zap.Error(err), zap.String("userID", userID), zap.String("parentId", req.ParentID), zap.String("name", req.Name))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-	cache.InvalidateFolder(c.Request.Context(), h.cache, req.ParentID)
-	c.JSON(http.StatusCreated, gin.H{"message": "folder created"})
+
+	if req.ParentID != "" {
+		cache.InvalidateFolder(c.Request.Context(), h.cache, req.ParentID)
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"id": newID, "message": "folder created"})
 }
 
+// listContents returns immediate child folders and files for a folder
 func (h *folderHandler) listContents(c *gin.Context) {
 	userID := auth.GetUserIDFromCtx(c.Request.Context())
 	folderID := c.Param("id")
 
-	// Try cache first
+	var owner string
+	if err := h.db.QueryRowContext(c.Request.Context(), `SELECT user_id FROM folders WHERE id=$1 AND deleted_at IS NULL`, folderID).Scan(&owner); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "folder not found"})
+		return
+	}
+	if owner != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized"})
+		return
+	}
+
 	cacheKey := cache.FolderContentsKey(folderID)
-	var cachedResponse gin.H
 	if h.cache != nil {
-		if err := h.cache.Get(c.Request.Context(), cacheKey, &cachedResponse); err == nil {
-			c.JSON(http.StatusOK, cachedResponse)
+		var cached gin.H
+		if err := h.cache.Get(c.Request.Context(), cacheKey, &cached); err == nil {
+			c.JSON(http.StatusOK, cached)
 			return
 		}
 	}
-	folderRows, err := h.db.QueryContext(c.Request.Context(),
-		`SELECT id, name, created_at FROM folders 
-         WHERE user_id=$1 AND parent_id=$2 AND deleted_at IS NULL`,
-		userID, folderID,
-	)
+
+	sfRows, err := h.db.QueryContext(c.Request.Context(), `
+		SELECT id, name, created_at FROM folders
+		WHERE user_id=$1 AND parent_id=$2 AND deleted_at IS NULL
+		ORDER BY created_at DESC
+	`, userID, folderID)
 	if err != nil {
+		logger.L.Error("folders.listContents: subfolders query failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-	defer folderRows.Close()
-
-	subfolders := []map[string]interface{}{}
-	for folderRows.Next() {
+	defer sfRows.Close()
+	subs := []map[string]interface{}{}
+	for sfRows.Next() {
 		var id, name, createdAt string
-		_ = folderRows.Scan(&id, &name, &createdAt)
-		subfolders = append(subfolders, map[string]interface{}{
-			"id":         id,
-			"name":       name,
-			"created_at": createdAt,
-		})
+		if err := sfRows.Scan(&id, &name, &createdAt); err != nil {
+			continue
+		}
+		subs = append(subs, map[string]interface{}{"id": id, "name": name, "createdAt": createdAt})
 	}
 
-	fileRows, err := h.db.QueryContext(c.Request.Context(),
-		`SELECT id, filename, declared_mime, original_size_bytes, created_at
-         FROM user_files
-         WHERE user_id=$1 AND folder_id=$2 AND deleted_at IS NULL`,
-		userID, folderID,
-	)
+	fRows, err := h.db.QueryContext(c.Request.Context(), `
+		SELECT id, filename, declared_mime, original_size_bytes, created_at
+		FROM user_files
+		WHERE user_id=$1 AND folder_id=$2 AND deleted_at IS NULL
+		ORDER BY created_at DESC
+	`, userID, folderID)
 	if err != nil {
+		logger.L.Error("folders.listContents: files query failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-	defer fileRows.Close()
-
+	defer fRows.Close()
 	files := []map[string]interface{}{}
-	for fileRows.Next() {
-		var id, filename, mime string
+	for fRows.Next() {
+		var id, filename, mime, createdAt string
 		var size int64
-		var createdAt string
-		_ = fileRows.Scan(&id, &filename, &mime, &size, &createdAt)
-		files = append(files, map[string]interface{}{
-			"id":        id,
-			"filename":  filename,
-			"mime":      mime,
-			"size":      size,
-			"createdAt": createdAt,
-		})
+		if err := fRows.Scan(&id, &filename, &mime, &size, &createdAt); err != nil {
+			continue
+		}
+		files = append(files, map[string]interface{}{"id": id, "filename": filename, "mime": mime, "size": size, "createdAt": createdAt})
 	}
 
-	resp := gin.H{
-		"folders": subfolders,
-		"files":   files,
-	}
-
-	// Write-through cache
+	resp := gin.H{"folders": subs, "files": files}
 	if h.cache != nil {
 		_ = h.cache.Set(c.Request.Context(), cacheKey, resp, cache.TTLFolderList)
 	}
 	c.JSON(http.StatusOK, resp)
 }
 
-func (h *folderHandler) getTree(c *gin.Context) {
-	userID := auth.GetUserIDFromCtx(c.Request.Context())
-	rootID := c.Param("id")
+type renameFolderRequest struct {
+	Name string `json:"name" binding:"required"`
+}
 
-	tree, err := h.buildFolderTree(c, userID, rootID)
+func (h *folderHandler) rename(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	folderID := c.Param("id")
+	var req renameFolderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	_, err := h.db.ExecContext(c.Request.Context(),
+		`UPDATE folders SET name=$1, updated_at=now() WHERE id=$2 AND user_id=$3`,
+		req.Name, folderID, userID,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-	c.JSON(http.StatusOK, tree)
+	cache.InvalidateFolder(c.Request.Context(), h.cache, folderID)
+	c.JSON(http.StatusOK, gin.H{"message": "folder renamed"})
+}
+
+type moveFolderRequest struct {
+	TargetParentID string `json:"targetParentId"`
+}
+
+func (h *folderHandler) move(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	folderID := c.Param("id")
+	var req moveFolderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if folderID == req.TargetParentID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot move folder inside itself"})
+		return
+	}
+	_, err := h.db.ExecContext(c.Request.Context(),
+		`UPDATE folders SET parent_id=$1, updated_at=now() WHERE id=$2 AND user_id=$3`,
+		req.TargetParentID, folderID, userID,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+	cache.InvalidateFolder(c.Request.Context(), h.cache, folderID)
+	if req.TargetParentID != "" {
+		cache.InvalidateFolder(c.Request.Context(), h.cache, req.TargetParentID)
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "folder moved"})
 }
 
 func (h *folderHandler) listFilesInFolder(c *gin.Context) {
@@ -318,6 +474,18 @@ func (h *folderHandler) listFilesInFolder(c *gin.Context) {
 	})
 }
 
+func (h *folderHandler) getTree(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	rootID := c.Param("id")
+
+	tree, err := h.buildFolderTree(c, userID, rootID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+	c.JSON(http.StatusOK, tree)
+}
+
 func (h *folderHandler) buildFolderTree(c *gin.Context, userID, folderID string) (map[string]interface{}, error) {
 	var name, createdAt string
 	err := h.db.QueryRowContext(c.Request.Context(),
@@ -355,67 +523,6 @@ func (h *folderHandler) buildFolderTree(c *gin.Context, userID, folderID string)
 	}, nil
 }
 
-type moveFolderRequest struct {
-	TargetParentID string `json:"targetParentId"`
-}
-
-func (h *folderHandler) move(c *gin.Context) {
-	userID := auth.GetUserIDFromCtx(c.Request.Context())
-	folderID := c.Param("id")
-
-	var req moveFolderRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	if folderID == req.TargetParentID {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot move folder inside itself"})
-		return
-	}
-
-	_, err := h.db.ExecContext(c.Request.Context(),
-		`UPDATE folders SET parent_id=$1, updated_at=now() WHERE id=$2 AND user_id=$3`,
-		req.TargetParentID, folderID, userID,
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	// cache invalidation
-	cache.InvalidateFolder(c.Request.Context(), h.cache, folderID)
-	cache.InvalidateFolder(c.Request.Context(), h.cache, req.TargetParentID)
-
-	c.JSON(http.StatusOK, gin.H{"message": "folder moved"})
-}
-
-type renameFolderRequest struct {
-	Name string `json:"name" binding:"required"`
-}
-
-func (h *folderHandler) rename(c *gin.Context) {
-	userID := auth.GetUserIDFromCtx(c.Request.Context())
-	folderID := c.Param("id")
-	var req renameFolderRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	_, err := h.db.ExecContext(c.Request.Context(),
-		`UPDATE folders SET name=$1, updated_at=now() WHERE id=$2 AND user_id=$3`,
-		req.Name, folderID, userID,
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	// cache invalidation
-	cache.InvalidateFolder(c.Request.Context(), h.cache, folderID)
-
-	c.JSON(http.StatusOK, gin.H{"message": "folder renamed"})
-}
-
 func (h *folderHandler) delete(c *gin.Context) {
 	userID := auth.GetUserIDFromCtx(c.Request.Context())
 	folderID := c.Param("id")
@@ -424,67 +531,88 @@ func (h *folderHandler) delete(c *gin.Context) {
 
 	if !permanent {
 		// Soft delete entire subtree: mark folders/files deleted, adjust ref_counts, revoke shares
-		tx, _ := h.db.BeginTx(c.Request.Context(), nil)
-		// Collect subtree folders
-		rows, err := tx.QueryContext(c.Request.Context(), `
+		tx, err := h.db.BeginTx(c.Request.Context(), nil)
+		if err != nil {
+			logger.L.Error("folders.softdelete: begin tx failed", zap.Error(err), zap.String("userID", userID), zap.String("folderID", folderID))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+			return
+		}
+
+		// Collect all files within the subtree first to avoid executing statements while a cursor is open
+		type fileRow struct {
+			fileID    string
+			contentID string
+			blobKey   string
+		}
+		files := make([]fileRow, 0, 64)
+		frows, err := tx.QueryContext(c.Request.Context(), `
 			WITH RECURSIVE subfolders AS (
 				SELECT id FROM folders WHERE id=$1 AND user_id=$2
 				UNION ALL
 				SELECT f.id FROM folders f
 				INNER JOIN subfolders sf ON f.parent_id = sf.id
+				WHERE f.user_id = $2
 			)
-			SELECT id FROM subfolders
+			SELECT uf.id, uf.content_id, fc.blob_key
+			FROM user_files uf
+			JOIN file_contents fc ON uf.content_id = fc.id
+			WHERE uf.user_id=$2 AND uf.folder_id IN (SELECT id FROM subfolders) AND uf.deleted_at IS NULL
 		`, folderID, userID)
 		if err != nil {
 			_ = tx.Rollback()
+			logger.L.Error("folders.softdelete: list subtree files failed", zap.Error(err), zap.String("userID", userID), zap.String("folderID", folderID))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 			return
 		}
-		defer rows.Close()
-		folderIDs := []string{}
-		for rows.Next() {
-			var id string
-			_ = rows.Scan(&id)
-			folderIDs = append(folderIDs, id)
-		}
-		// For each folder, soft delete files and adjust ref_counts
-		for _, fid := range folderIDs {
-			frows, ferr := tx.QueryContext(c.Request.Context(), `
-				SELECT uf.id, uf.content_id, fc.blob_key
-				FROM user_files uf
-				JOIN file_contents fc ON uf.content_id = fc.id
-				WHERE uf.user_id=$1 AND uf.folder_id=$2 AND uf.deleted_at IS NULL
-			`, userID, fid)
-			if ferr != nil {
+		for frows.Next() {
+			var fr fileRow
+			if scanErr := frows.Scan(&fr.fileID, &fr.contentID, &fr.blobKey); scanErr != nil {
+				_ = frows.Close()
 				_ = tx.Rollback()
+				logger.L.Error("folders.softdelete: scan subtree file row failed", zap.Error(scanErr))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 				return
 			}
-			for frows.Next() {
-				var fileId, contentID, blobKey string
-				_ = frows.Scan(&fileId, &contentID, &blobKey)
-				if _, err := tx.ExecContext(c.Request.Context(),
-					"UPDATE user_files SET deleted_at = now() WHERE id=$1", fileId); err != nil {
-					_ = tx.Rollback()
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-					return
-				}
-				if _, err := tx.ExecContext(c.Request.Context(),
-					"UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1", contentID); err != nil {
-					_ = tx.Rollback()
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-					return
-				}
-				// No GC scheduling on soft delete; GC will be scheduled on permanent delete path.
-
-				_, _ = tx.ExecContext(c.Request.Context(),
-					"UPDATE shares SET revoked=true WHERE target_type='file' AND target_id=$1", fileId)
-			}
-			_ = frows.Close()
-
-			_, _ = tx.ExecContext(c.Request.Context(),
-				"UPDATE shares SET revoked=true WHERE target_type='folder' AND target_id=$1", fid)
+			files = append(files, fr)
 		}
+		_ = frows.Close()
+
+		// Now perform updates for files
+		for _, fr := range files {
+			if _, err := tx.ExecContext(c.Request.Context(),
+				"UPDATE user_files SET deleted_at = now() WHERE id=$1", fr.fileID); err != nil {
+				_ = tx.Rollback()
+				logger.L.Error("folders.softdelete: mark file deleted failed", zap.Error(err), zap.String("fileID", fr.fileID))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+				return
+			}
+			if _, err := tx.ExecContext(c.Request.Context(),
+				"UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1", fr.contentID); err != nil {
+				_ = tx.Rollback()
+				logger.L.Error("folders.softdelete: decrement ref_count failed", zap.Error(err), zap.String("contentID", fr.contentID))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+				return
+			}
+			if _, err := tx.ExecContext(c.Request.Context(),
+				"UPDATE shares SET revoked=true WHERE target_type='file' AND target_id=$1", fr.fileID); err != nil {
+				logger.L.Warn("folders.softdelete: revoke file shares failed", zap.Error(err), zap.String("fileID", fr.fileID))
+			}
+		}
+
+		// Revoke shares for all folders in subtree at once
+		if _, err := tx.ExecContext(c.Request.Context(), `
+			WITH RECURSIVE subfolders AS (
+				SELECT id FROM folders WHERE id=$1 AND user_id=$2
+				UNION ALL
+				SELECT f.id FROM folders f
+				INNER JOIN subfolders sf ON f.parent_id = sf.id
+				WHERE f.user_id = $2
+			)
+			UPDATE shares SET revoked=true WHERE target_type='folder' AND target_id IN (SELECT id FROM subfolders)
+		`, folderID, userID); err != nil {
+			logger.L.Warn("folders.softdelete: revoke folder shares failed", zap.Error(err), zap.String("folderID", folderID))
+		}
+
 		// Mark folders in subtree as deleted
 		if _, err := tx.ExecContext(c.Request.Context(), `
 			WITH RECURSIVE subfolders AS (
@@ -492,14 +620,17 @@ func (h *folderHandler) delete(c *gin.Context) {
 				UNION ALL
 				SELECT f.id FROM folders f
 				INNER JOIN subfolders sf ON f.parent_id = sf.id
+				WHERE f.user_id = $2
 			)
 			UPDATE folders SET deleted_at = now() WHERE id IN (SELECT id FROM subfolders)
 		`, folderID, userID); err != nil {
 			_ = tx.Rollback()
+			logger.L.Error("folders.softdelete: mark folders deleted failed", zap.Error(err), zap.String("userID", userID), zap.String("folderID", folderID))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 			return
 		}
 		if err := tx.Commit(); err != nil {
+			logger.L.Error("folders.softdelete: commit failed", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "commit failed"})
 			return
 		}
@@ -513,108 +644,137 @@ func (h *folderHandler) delete(c *gin.Context) {
 	}
 
 	// Permanent delete: recursively delete all descendant files and folders.
-	// This will also decrement ref_counts and schedule GC where needed.
-	tx, _ := h.db.BeginTx(c.Request.Context(), nil)
-
-	// Collect all descendant folder ids including the root
-	rows, err := tx.QueryContext(c.Request.Context(), `
+	tx, err := h.db.BeginTx(c.Request.Context(), nil)
+	if err != nil {
+		logger.L.Error("folders.harddelete: begin tx failed", zap.Error(err), zap.String("userID", userID), zap.String("folderID", folderID))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+	// Collect all files within the subtree first (including trashed ones)
+	type fileRow struct {
+		fileID    string
+		contentID string
+		blobKey   string
+	}
+	files := make([]fileRow, 0, 64)
+	frows, err := tx.QueryContext(c.Request.Context(), `
 		WITH RECURSIVE subfolders AS (
 			SELECT id FROM folders WHERE id=$1 AND user_id=$2
 			UNION ALL
 			SELECT f.id FROM folders f
 			INNER JOIN subfolders sf ON f.parent_id = sf.id
+			WHERE f.user_id = $2
 		)
-		SELECT id FROM subfolders
+		SELECT uf.id, uf.content_id, fc.blob_key
+		FROM user_files uf
+		JOIN file_contents fc ON uf.content_id = fc.id
+		WHERE uf.user_id=$2 AND uf.folder_id IN (SELECT id FROM subfolders)
 	`, folderID, userID)
 	if err != nil {
 		_ = tx.Rollback()
+		logger.L.Error("folders.harddelete: list subtree files failed", zap.Error(err), zap.String("userID", userID), zap.String("folderID", folderID))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-	defer rows.Close()
-
-	folderIDs := []string{}
-	for rows.Next() {
-		var id string
-		_ = rows.Scan(&id)
-		folderIDs = append(folderIDs, id)
-	}
-
-	// For each folder, permanently delete files and adjust ref_counts
-	for _, fid := range folderIDs {
-		// Fetch files in this folder (including trashed ones)
-		frows, ferr := tx.QueryContext(c.Request.Context(), `
-			SELECT uf.id, uf.content_id, fc.blob_key
-			FROM user_files uf
-			JOIN file_contents fc ON uf.content_id = fc.id
-			WHERE uf.user_id=$1 AND uf.folder_id=$2
-		`, userID, fid)
-		if ferr != nil {
+	for frows.Next() {
+		var fr fileRow
+		if scanErr := frows.Scan(&fr.fileID, &fr.contentID, &fr.blobKey); scanErr != nil {
+			_ = frows.Close()
 			_ = tx.Rollback()
+			logger.L.Error("folders.harddelete: scan file row failed", zap.Error(scanErr))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 			return
 		}
-		for frows.Next() {
-			var fileId, contentID, blobKey string
-			_ = frows.Scan(&fileId, &contentID, &blobKey)
-			// Delete the file row
-			if _, err := tx.ExecContext(c.Request.Context(),
-				"DELETE FROM user_files WHERE id=$1", fileId); err != nil {
+		files = append(files, fr)
+	}
+	_ = frows.Close()
+
+	// Now perform deletes/updates for each file without an open cursor
+	for _, fr := range files {
+		// Delete the user_files row first so the FK from user_files -> file_contents is removed
+		if _, err := tx.ExecContext(c.Request.Context(), "DELETE FROM user_files WHERE id=$1", fr.fileID); err != nil {
+			_ = tx.Rollback()
+			logger.L.Error("folders.harddelete: delete user_file failed", zap.Error(err), zap.String("fileID", fr.fileID))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+			return
+		}
+		// Decrement ref_count and get the resulting value
+		var refCount int64
+		if err := tx.QueryRowContext(c.Request.Context(),
+			"UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1 RETURNING ref_count",
+			fr.contentID,
+		).Scan(&refCount); err != nil {
+			_ = tx.Rollback()
+			logger.L.Error("folders.harddelete: refcount decrement failed", zap.Error(err), zap.String("contentID", fr.contentID))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+			return
+		}
+		// Only publish GC and delete the file_contents row if ref_count is zero AND no remaining user_files reference it.
+		if refCount == 0 {
+			// As a safety check, ensure there are no lingering user_files referencing this content.
+			var remaining int64
+			if err := tx.QueryRowContext(c.Request.Context(), "SELECT COUNT(1) FROM user_files WHERE content_id=$1", fr.contentID).Scan(&remaining); err != nil {
 				_ = tx.Rollback()
+				logger.L.Error("folders.harddelete: check remaining user_files failed", zap.Error(err), zap.String("contentID", fr.contentID))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 				return
 			}
-			// Decrement ref_count and if 0 schedule GC (permanent delete only)
-			var refCount int64
-			if err := tx.QueryRowContext(c.Request.Context(),
-				"UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1 RETURNING ref_count",
-				contentID,
-			).Scan(&refCount); err != nil {
-				_ = tx.Rollback()
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-				return
-			}
-			if refCount == 0 {
+			if remaining == 0 {
 				if h.producer != nil {
-					_ = h.producer.PublishGCJob(c.Request.Context(), worker.GCJob{
-						ContentID: contentID,
-						BlobKey:   blobKey,
-					})
+					if err := h.producer.PublishGCJob(c.Request.Context(), worker.GCJob{
+						ContentID: fr.contentID,
+						BlobKey:   fr.blobKey,
+					}); err != nil {
+						logger.L.Warn("folders.harddelete: publish GC job failed", zap.Error(err), zap.String("contentID", fr.contentID))
+					}
 				}
-				// delete file_contents metadata row
-				if _, err := tx.ExecContext(c.Request.Context(), "DELETE FROM file_contents WHERE id=$1", contentID); err != nil {
+				if _, err := tx.ExecContext(c.Request.Context(), "DELETE FROM file_contents WHERE id=$1", fr.contentID); err != nil {
 					_ = tx.Rollback()
+					logger.L.Error("folders.harddelete: delete file_contents failed", zap.Error(err), zap.String("contentID", fr.contentID))
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 					return
 				}
 			}
-			// Remove shares on file permanently
-			_, _ = tx.ExecContext(c.Request.Context(),
-				"DELETE FROM shares WHERE target_type='file' AND target_id=$1", fileId)
 		}
-		_ = frows.Close()
-		// Remove shares on folder permanently
-		_, _ = tx.ExecContext(c.Request.Context(),
-			"DELETE FROM shares WHERE target_type='folder' AND target_id=$1", fid)
+		if _, err := tx.ExecContext(c.Request.Context(),
+			"DELETE FROM shares WHERE target_type='file' AND target_id=$1", fr.fileID); err != nil {
+			logger.L.Warn("folders.harddelete: delete file shares failed", zap.Error(err), zap.String("fileID", fr.fileID))
+		}
 	}
 
-	// Delete folders themselves
-	// Order children first by deleting using recursive CTE
+	// Remove shares on folders in subtree (bulk)
 	if _, err := tx.ExecContext(c.Request.Context(), `
 		WITH RECURSIVE subfolders AS (
 			SELECT id FROM folders WHERE id=$1 AND user_id=$2
 			UNION ALL
 			SELECT f.id FROM folders f
 			INNER JOIN subfolders sf ON f.parent_id = sf.id
+			WHERE f.user_id = $2
+		)
+		DELETE FROM shares WHERE target_type='folder' AND target_id IN (SELECT id FROM subfolders)
+	`, folderID, userID); err != nil {
+		logger.L.Warn("folders.harddelete: delete folder shares failed", zap.Error(err), zap.String("folderID", folderID))
+	}
+
+	// Delete folders themselves
+	if _, err := tx.ExecContext(c.Request.Context(), `
+		WITH RECURSIVE subfolders AS (
+			SELECT id FROM folders WHERE id=$1 AND user_id=$2
+			UNION ALL
+			SELECT f.id FROM folders f
+			INNER JOIN subfolders sf ON f.parent_id = sf.id
+			WHERE f.user_id = $2
 		)
 		DELETE FROM folders WHERE id IN (SELECT id FROM subfolders)
 	`, folderID, userID); err != nil {
 		_ = tx.Rollback()
+		logger.L.Error("folders.harddelete: delete folders failed", zap.Error(err), zap.String("userID", userID), zap.String("folderID", folderID))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
+		logger.L.Error("folders.harddelete: commit failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "commit failed"})
 		return
 	}

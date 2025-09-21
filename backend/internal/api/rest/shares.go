@@ -12,6 +12,8 @@ import (
 	"backend/internal/storage"
 	"backend/pkg/logger"
 
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -28,6 +30,8 @@ func RegisterShareRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStora
 	protected.POST("/files/:id/share/user", h.shareFileToUser)
 	protected.GET("/files/:id/shares", h.listFileShares)
 	protected.POST("/folders/:id/share", h.createPublicFolderShare)
+	protected.POST("/folders/:id/share/user", h.shareFolderToUser)
+	protected.GET("/shared-with-me", h.listSharedWithMe)
 }
 
 type shareHandler struct {
@@ -162,8 +166,8 @@ func (h *shareHandler) createPublicFolderShare(c *gin.Context) {
 }
 
 type shareToUserReq struct {
-	TargetUserId string `json:"targetUserId" binding:"required"`
-	Permission   string `json:"permission"`
+	TargetUserEmail string `json:"targetUserEmail" binding:"required,email"`
+	Permission      string `json:"permission"`
 }
 
 func (h *shareHandler) shareFileToUser(c *gin.Context) {
@@ -193,6 +197,18 @@ func (h *shareHandler) shareFileToUser(c *gin.Context) {
 		return
 	}
 
+	var targetUserID string
+	err = h.db.QueryRowContext(c.Request.Context(), "SELECT id FROM users WHERE email=$1", req.TargetUserEmail).Scan(&targetUserID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "target user not found"})
+			return
+		}
+		logger.L.Error("db err", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+
 	token, _ := genToken()
 	var shareID string
 	err = h.db.QueryRowContext(c.Request.Context(), `
@@ -209,12 +225,110 @@ func (h *shareHandler) shareFileToUser(c *gin.Context) {
 	_, err = h.db.ExecContext(c.Request.Context(), `
 		INSERT INTO share_users (share_id, target_user_id, permission, created_at)
 		VALUES ($1, $2, $3, now())
-	`, shareID, req.TargetUserId, req.Permission)
+	`, shareID, targetUserID, req.Permission)
 	if err != nil {
 		logger.L.Error("insert share_user failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
+
+	c.JSON(http.StatusCreated, gin.H{"shareId": shareID})
+}
+
+func (h *shareHandler) shareFolderToUser(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	folderID := c.Param("id")
+
+	var owner string
+	err := h.db.QueryRowContext(c.Request.Context(),
+		"SELECT user_id FROM folders WHERE id=$1 AND deleted_at IS NULL", folderID,
+	).Scan(&owner)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "folder not found"})
+			return
+		}
+		logger.L.Error("db err", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+	if owner != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not owner"})
+		return
+	}
+
+	var req shareToUserReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	// Enforce sensible default permission
+	permission := req.Permission
+	if permission == "" {
+		permission = "read"
+	}
+
+	var targetUserID string
+	err = h.db.QueryRowContext(c.Request.Context(), "SELECT id FROM users WHERE email=$1", req.TargetUserEmail).Scan(&targetUserID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "target user not found"})
+			return
+		}
+		logger.L.Error("db err", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+
+	// Create share and share_users in a transaction for atomicity
+	tx, err := h.db.BeginTx(c.Request.Context(), nil)
+	if err != nil {
+		logger.L.Error("begin tx failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+	defer func() {
+		// Ensure rollback on early returns
+		_ = tx.Rollback()
+	}()
+
+	token, terr := genToken()
+	if terr != nil {
+		logger.L.Error("token gen failed", zap.Error(terr))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+
+	var shareID string
+	err = tx.QueryRowContext(c.Request.Context(), `
+		INSERT INTO shares (id, token, creator_id, target_type, target_id, title, description, expires_at, created_at)
+		VALUES (gen_random_uuid(), $1, $2, 'folder', $3, NULL, NULL, NULL, now())
+		RETURNING id
+	`, token, userID, folderID).Scan(&shareID)
+	if err != nil {
+		logger.L.Error("insert share record failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+
+	_, err = tx.ExecContext(c.Request.Context(), `
+		INSERT INTO share_users (share_id, target_user_id, permission, created_at)
+		VALUES ($1, $2, $3, now())
+	`, shareID, targetUserID, permission)
+	if err != nil {
+		logger.L.Error("insert share_user failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+
+	if err = tx.Commit(); err != nil {
+		logger.L.Error("commit share tx failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+
+	// No specific caches to invalidate for private folder shares currently.
+	// If you add folder-sharing listings with caching, invalidate here.
 
 	c.JSON(http.StatusCreated, gin.H{"shareId": shareID})
 }
@@ -333,6 +447,115 @@ func (h *shareHandler) revokeShare(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "revoked"})
+}
+
+// listSharedWithMe returns files and folders shared with the authenticated user
+func (h *shareHandler) listSharedWithMe(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	// Pagination params for files and folders independently (optional)
+	// For simplicity, reusing limit/offset for both
+	limit := 50
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			if n > 0 && n <= 200 {
+				limit = n
+			} else if n > 200 {
+				limit = 200
+			}
+		}
+	}
+	offset := 0
+	if v := c.Query("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+
+	// Files shared with the user
+	filesRows, err := h.db.QueryContext(c.Request.Context(), `
+		SELECT DISTINCT ON (uf.id)
+			   uf.id, uf.filename, uf.declared_mime, uf.original_size_bytes,
+			   uf.created_at, uf.updated_at, uf.download_count
+		FROM user_files uf
+		JOIN shares s ON s.target_type='file' AND s.target_id = uf.id AND s.revoked = false
+		JOIN share_users su ON su.share_id = s.id
+		WHERE su.target_user_id = $1 AND uf.deleted_at IS NULL
+		ORDER BY uf.id, uf.created_at DESC
+		LIMIT $2 OFFSET $3
+	`, userID, limit, offset)
+	if err != nil {
+		logger.L.Error("query shared files failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+	defer filesRows.Close()
+
+	sharedFiles := make([]map[string]interface{}, 0)
+	for filesRows.Next() {
+		var (
+			id, filename, mime   string
+			size                 int64
+			createdAt, updatedAt time.Time
+			downloadCount        int64
+		)
+		if err := filesRows.Scan(&id, &filename, &mime, &size, &createdAt, &updatedAt, &downloadCount); err == nil {
+			sharedFiles = append(sharedFiles, map[string]interface{}{
+				"id":            id,
+				"filename":      filename,
+				"mime":          mime,
+				"size":          size,
+				"createdAt":     createdAt,
+				"updatedAt":     updatedAt,
+				"downloadCount": downloadCount,
+			})
+		}
+	}
+
+	// Folders shared with the user
+	folderRows, err := h.db.QueryContext(c.Request.Context(), `
+		SELECT DISTINCT ON (f.id)
+			   f.id, f.name, f.created_at, f.updated_at
+		FROM folders f
+		JOIN shares s ON s.target_type='folder' AND s.target_id = f.id AND s.revoked = false
+		JOIN share_users su ON su.share_id = s.id
+		WHERE su.target_user_id = $1 AND f.deleted_at IS NULL
+		ORDER BY f.id, f.created_at DESC
+		LIMIT $2 OFFSET $3
+	`, userID, limit, offset)
+	if err != nil {
+		logger.L.Error("query shared folders failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+	defer folderRows.Close()
+
+	sharedFolders := make([]map[string]interface{}, 0)
+	for folderRows.Next() {
+		var (
+			id, name             string
+			createdAt, updatedAt time.Time
+		)
+		if err := folderRows.Scan(&id, &name, &createdAt, &updatedAt); err == nil {
+			sharedFolders = append(sharedFolders, map[string]interface{}{
+				"id":        id,
+				"name":      name,
+				"createdAt": createdAt,
+				"updatedAt": updatedAt,
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"files":   sharedFiles,
+		"folders": sharedFolders,
+		"limit":   limit,
+		"offset":  offset,
+	})
 }
 
 // GET /s/:token

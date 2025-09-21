@@ -12,8 +12,10 @@ import (
 
 	"backend/internal/audit"
 	"backend/internal/auth"
+	"backend/internal/cache"
 	"backend/internal/storage"
 	"backend/internal/utils"
+	"backend/internal/worker"
 	"backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
@@ -26,9 +28,11 @@ func RegisterUploadRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStor
 	uploads := rg.Group("/uploads")
 	uploads.Use(auth.RequireAuth(jwtSecret))
 	h := &uploadHandler{
-		db:      db,
-		storage: st,
+		db:       db,
+		storage:  st,
+		producer: worker.NewProducer(),
 	}
+
 	uploads.POST("/session", h.createSession)
 	uploads.POST("/complete", h.complete)
 	uploads.POST("/abort", h.abort)
@@ -36,8 +40,10 @@ func RegisterUploadRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStor
 }
 
 type uploadHandler struct {
-	db      *sql.DB
-	storage *storage.MinioStorage
+	db       *sql.DB
+	storage  *storage.MinioStorage
+	cache    cache.Cache
+	producer *worker.Producer
 }
 
 type FolderInitFile struct {
@@ -585,6 +591,12 @@ func (h *uploadHandler) complete(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 			return
 		}
+
+		// Invalidate cache
+		if h.cache != nil && req.FolderID != "" {
+			cache.InvalidateFolder(c.Request.Context(), h.cache, req.FolderID)
+		}
+
 		c.JSON(http.StatusOK, gin.H{"userFileId": newUserFileID, "deduped": true})
 		return
 	}
@@ -665,6 +677,12 @@ func (h *uploadHandler) complete(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
+
+	// Invalidate cache
+	if h.cache != nil && req.FolderID != "" {
+		cache.InvalidateFolder(c.Request.Context(), h.cache, req.FolderID)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"userFileId": newUserFileID, "contentId": newContentID, "deduped": false})
 }
 
@@ -707,7 +725,7 @@ func (h *uploadHandler) getUsageAndQuota(ctx context.Context, userID string) (in
 	if err := h.db.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(original_size_bytes),0)
 		FROM user_files
-		WHERE user_id=$1
+		WHERE user_id=$1 AND deleted_at IS NULL
 	`, userID).Scan(&used); err != nil {
 		return 0, 0, err
 	}
