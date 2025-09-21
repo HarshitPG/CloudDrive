@@ -153,17 +153,13 @@ export default function SharedView() {
           return;
         }
       } catch (err) {
-        // ignore and fallback to snapshot share approach
         console.debug("share-specific download failed, falling back", err);
       }
 
       // Fallback: create a temporary snapshot public share and download archive via token
       const share = await folderOperationsApi.createPublicFolderShare(
         folder.id,
-        {
-          snapshotMode: true,
-          recursive: true,
-        }
+        {}
       );
       try {
         const blob = await publicShareApi.downloadFolderArchive(share.token);

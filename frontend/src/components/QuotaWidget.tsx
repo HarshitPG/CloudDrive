@@ -44,17 +44,21 @@ export default function QuotaWidget() {
     );
   }
 
-  const percent = Math.min(100, Math.round(quota.quota_used_percent));
+  const percent = Math.min(
+    100,
+    Math.round((quota.original_bytes / quota.quota_bytes) * 100)
+  );
+  const totalUsed = quota.original_bytes - quota.deduped_bytes;
 
   return (
     <div className="mt-auto">
       <div className="text-sm mb-1">
-        Storage: {Math.round(quota.deduped_bytes / 1024 / 1024)}MB /{" "}
+        Storage: {Math.round(quota.original_bytes / 1024 / 1024)}MB /{" "}
         {Math.round(quota.quota_bytes / 1024 / 1024)}MB
       </div>
       <div className="w-full bg-gray-200 rounded h-2">
         <div
-          className="bg-blue-500 h-2 rounded"
+          className="bg-gray-500 h-2 rounded"
           style={{ width: `${percent}%` }}
         />
       </div>

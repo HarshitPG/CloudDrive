@@ -75,11 +75,8 @@ export default function MoveModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[95vw] max-w-4xl h-[90vh] max-h-[800px] flex flex-col p-0 gap-0">
         {/* Header */}
-        <DialogHeader className="flex-shrink-0 px-6 py-4 border-b bg-gradient-to-r from-background to-muted/30">
+        <DialogHeader className="flex-shrink-0 px-8 py-4 border-b  from-background to-muted/30">
           <DialogTitle className="flex items-center gap-3 text-lg md:text-xl">
-            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 border border-primary/20">
-              <MoveRight className="w-5 h-5 text-primary" />
-            </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span>Move {item?.type === "folder" ? "folder" : "file"}</span>
@@ -101,13 +98,14 @@ export default function MoveModal({
           {/* Search */}
           <div className="flex-shrink-0">
             <label htmlFor="folder-search" className="sr-only">
-              Search folders
+              Search folders(coming soon)
             </label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
               <Input
                 id="folder-search"
                 value={search}
+                disabled
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search folders..."
                 className="pl-10 h-11 text-base border-2 focus:border-primary/50 transition-colors"

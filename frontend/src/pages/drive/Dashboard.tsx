@@ -830,7 +830,9 @@ export default function Home() {
               variant={viewMode === "grid" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("grid")}
-              className="border-0 rounded-r-none"
+              className={
+                viewMode === "grid" ? "border-1" : "border-0 rounded-l-none"
+              }
             >
               <Grid3X3 className="w-4 h-4" />
             </Button>
@@ -838,7 +840,9 @@ export default function Home() {
               variant={viewMode === "list" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("list")}
-              className="border-0 rounded-l-none"
+              className={
+                viewMode === "list" ? "border-1" : "border-0 rounded-l-none"
+              }
             >
               <List className="w-4 h-4" />
             </Button>

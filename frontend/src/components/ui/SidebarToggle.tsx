@@ -10,6 +10,7 @@ import {
   Folder,
   Home,
   Upload,
+  ChevronDown,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import QuotaWidget from "../QuotaWidget";
@@ -21,6 +22,8 @@ export default function SidebarToggle() {
   const [isOpen, setIsOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -79,7 +82,11 @@ export default function SidebarToggle() {
             }}
           />
           <div className="relative">
-            <details className="group">
+            <details
+              ref={detailsRef}
+              onToggle={() => setUploadOpen(Boolean(detailsRef.current?.open))}
+              className="group"
+            >
               <summary
                 className={`flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition hover:bg-sidebar-accent text-sidebar-foreground list-none`}
               >
@@ -87,10 +94,18 @@ export default function SidebarToggle() {
                   <Upload size={20} />
                 </div>
                 {isOpen && !isMobile && (
-                  <span className="truncate">Upload</span>
+                  <span className="truncate flex items-center gap-2">
+                    <span>Upload</span>
+                    <ChevronDown
+                      size={22}
+                      className={`transition-transform duration-150 ease-in-out text-sidebar-foreground ${
+                        uploadOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </span>
                 )}
               </summary>
-              <div className="absolute z-10 mt-1 w-44 rounded-md border border-sidebar-border bg-sidebar shadow-lg">
+              <div className="absolute z-10 mt-1 w-44 rounded-md border border-sidebar-border bg-white shadow-lg">
                 <button
                   className="block w-full text-left px-3 py-2 text-sm hover:bg-sidebar-accent"
                   onClick={() => {
@@ -156,7 +171,6 @@ export default function SidebarToggle() {
         {isOpen && !isMobile && (
           <>
             <QuotaWidget />
-            <p className="text-xs mt-1">2.1 GB of 15 GB used</p>
           </>
         )}
       </div>

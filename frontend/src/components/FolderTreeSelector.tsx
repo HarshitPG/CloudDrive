@@ -190,7 +190,7 @@ export default function FolderTreeSelector({
             "hover:shadow-md hover:scale-[1.02]",
             "focus-within:ring-2 focus-within:ring-primary/20 focus-within:ring-offset-2",
             isSelected && [
-              "bg-gradient-to-r from-primary/15 to-primary/10",
+              // "bg-gradient-to-r from-primary/15 to-primary/10",
               "border border-primary/30 shadow-lg scale-[1.02]",
               "ring-2 ring-primary/20",
             ],
