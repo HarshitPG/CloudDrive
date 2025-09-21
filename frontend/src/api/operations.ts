@@ -311,6 +311,35 @@ export const folderOperationsApi = {
     }
   },
 
+  // Download entire folder as a ZIP archive (authenticated)
+  async downloadFolderArchive(
+    folderId: string,
+    recursive = true,
+    onProgress?: (downloaded: number, total: number) => void
+  ): Promise<Blob> {
+    const params = new URLSearchParams();
+    if (recursive) params.set("recursive", "true");
+    const url = `/api/v1/folders/${folderId}/download?${params.toString()}`;
+    try {
+      const response = await axios.get(url, {
+        responseType: "blob",
+        onDownloadProgress: (progressEvent: AxiosProgressEvent) => {
+          if (!onProgress || !progressEvent) return;
+          const loaded = (progressEvent.loaded as number) || 0;
+          const total = (progressEvent.total as number) || 0;
+          onProgress(loaded, total);
+        },
+      });
+      return response.data as Blob;
+    } catch (error) {
+      throw new Error(
+        `Failed to download folder archive: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  },
+
   // Share a folder with a specific user (private share)
   async shareFolderWithUser(
     folderId: string,

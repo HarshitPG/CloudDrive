@@ -365,16 +365,12 @@ export default function Home() {
         await downloadUrlToFile(result.downloadUrl, filename);
         setToastMessage("Download completed");
       } else {
-        // Create a temporary snapshot public share for this folder, download archive, then revoke
-        const share = await folderOperationsApi.createPublicFolderShare(
-          item.id,
-          {
-            snapshotMode: true,
-            recursive: true,
-          }
-        );
+        // Direct authenticated folder download (request server to stream ZIP)
         try {
-          const blob = await publicShareApi.downloadFolderArchive(share.token);
+          const blob = await folderOperationsApi.downloadFolderArchive(
+            item.id,
+            true
+          );
           const filename = `${item.name || "folder"}.zip`;
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
@@ -385,13 +381,11 @@ export default function Home() {
           a.remove();
           URL.revokeObjectURL(url);
           setToastMessage("Folder download started");
-        } finally {
-          // best-effort revoke of temporary share
-          try {
-            await folderOperationsApi.revokeFolderShare(share.shareId);
-          } catch (err) {
-            console.warn("Failed to revoke temporary folder share", err);
-          }
+        } catch (err) {
+          console.error("Folder download failed:", err);
+          setToastMessage(
+            err instanceof Error ? err.message : "Folder download failed"
+          );
         }
       }
     } catch (error) {
@@ -810,7 +804,7 @@ export default function Home() {
               onChange={(e) =>
                 !isSearchDisabled && setSearchQuery(e.target.value)
               }
-              className="pl-10 drive-surface"
+              className="drive-surface px-10 "
               disabled={isSearchDisabled}
             />
             {isSearching && !isSearchDisabled && (

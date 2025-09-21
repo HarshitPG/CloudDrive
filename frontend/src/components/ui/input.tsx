@@ -8,7 +8,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       <input
         {...props}
         ref={ref}
-        className={`drive-surface w-full ${className}`}
+        className={`drive-surface w-full py-2 ${className}`}
       />
     );
   }
