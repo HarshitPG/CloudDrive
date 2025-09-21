@@ -62,31 +62,76 @@ export default function ShareModal({
   const [userShareData, setUserShareData] = useState<ShareToUserRequest>(
     () => ({ targetUserEmail: "", permission: "read" })
   );
+  const [userShareSuccess, setUserShareSuccess] = useState<string | null>(null);
 
   const handlePublicShare = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
+      // Normalize expiresAt to full ISO string (RFC3339) or null to match backend *time.Time parsing
+      const rawExpires = publicShareData.expiresAt;
+      let expiresIso: string | null | undefined = undefined;
+      if (rawExpires) {
+        try {
+          const [datePart, timePart] = rawExpires.split("T");
+          if (datePart && timePart) {
+            const [year, month, day] = datePart
+              .split("-")
+              .map((v) => parseInt(v, 10));
+            const [hour, minute] = timePart
+              .split(":")
+              .map((v) => parseInt(v, 10));
+            const dt = new Date(year, month - 1, day, hour, minute);
+            expiresIso = dt.toISOString();
+          }
+        } catch (e) {
+          const d = new Date(rawExpires as string);
+          if (!isNaN(d.getTime())) expiresIso = d.toISOString();
+        }
+      } else {
+        expiresIso = null;
+      }
+
       if (item.type === "file") {
+        const payload = {
+          title: publicShareData.title,
+          description: publicShareData.description,
+          expiresAt: expiresIso,
+        };
         const result = await fileOperationsApi.createPublicFileShare(
           item.id,
-          publicShareData
+          payload
         );
         const fullUrl = `${window.location.origin}${result.url}`;
         setGeneratedShareUrl(fullUrl);
-        onShareSuccess?.(fullUrl);
       } else {
+        const payload: CreatePublicShareRequest & {
+          recursive?: boolean;
+          snapshotMode?: boolean;
+        } = {
+          title: publicShareData.title,
+          description: publicShareData.description,
+          expiresAt: expiresIso as string | null | undefined,
+          // recursive: folderShareOptions.recursive,
+          // snapshotMode: folderShareOptions.snapshotMode,
+        };
+        const createReq = {
+          title: publicShareData.title,
+          description: publicShareData.description,
+          // recursive: folderShareOptions.recursive,
+          // snapshotMode: folderShareOptions.snapshotMode,
+          expiresAt: expiresIso as string | null | undefined,
+        };
         const result = await folderOperationsApi.createPublicFolderShare(
           item.id,
-          {
-            ...publicShareData,
-            ...folderShareOptions,
-          }
+          createReq
         );
-        const fullUrl = `${window.location.origin}/fs/${result.token}`;
+        const fullUrl =
+          result.url && result.url.startsWith("http")
+            ? result.url
+            : `${window.location.origin}${result.url}`;
         setGeneratedShareUrl(fullUrl);
-        onShareSuccess?.(fullUrl);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create share");
@@ -112,7 +157,8 @@ export default function ShareModal({
       }
 
       setUserShareData({ targetUserEmail: "", permission: "read" });
-      onShareSuccess?.("Shared successfully with user");
+      setUserShareSuccess("User successfully added to share");
+      setGeneratedShareUrl(null);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to share with user"
@@ -140,6 +186,7 @@ export default function ShareModal({
       expiresAt: undefined,
     });
     setUserShareData({ targetUserEmail: "", permission: "read" });
+    setUserShareSuccess(null);
     setGeneratedShareUrl(null);
     setError(null);
     setCopiedUrl(null);
@@ -210,7 +257,7 @@ export default function ShareModal({
         </AnimatePresence>
 
         {/* Tab Content */}
-        <div className="space-y-4">
+        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
           {activeTab === "public" && (
             <motion.div
               key="public"
@@ -221,7 +268,7 @@ export default function ShareModal({
               className="space-y-4"
             >
               <div className="space-y-2">
-                <Label htmlFor="share-title">Share Title (Optional)</Label>
+                <Label htmlFor="share-title">Share Title</Label>
                 <Input
                   id="share-title"
                   value={publicShareData.title || ""}
@@ -236,9 +283,7 @@ export default function ShareModal({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="share-description">
-                  Description (Optional)
-                </Label>
+                <Label htmlFor="share-description">Description</Label>
                 <Textarea
                   id="share-description"
                   value={publicShareData.description || ""}
@@ -248,13 +293,13 @@ export default function ShareModal({
                       description: e.target.value,
                     })
                   }
-                  placeholder="Add a description for this share..."
+                  placeholder="Add an optional description"
                   rows={3}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="expiry-date">Expiry Date (Optional)</Label>
+                <Label htmlFor="expiry-date">Expiry Date</Label>
                 <Input
                   id="expiry-date"
                   type="datetime-local"
@@ -267,15 +312,18 @@ export default function ShareModal({
                   }
                   min={new Date().toISOString().slice(0, 16)}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Leave empty for permanent share
-                </p>
               </div>
 
               {/* Folder-specific options */}
               {item.type === "folder" && (
                 <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
                   <h4 className="text-sm font-medium">Folder Share Options</h4>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    <b>Note:</b> the current implementation safely shares small
+                    folders (a few hundred MB). Multi‑GB folder sharing is
+                    disabled because the stream endpoint is fragile (present in
+                    local dev: move synchronous ZIP to async archive workflow)
+                  </p>
 
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
@@ -288,13 +336,10 @@ export default function ShareModal({
                       id="recursive"
                       type="checkbox"
                       checked={folderShareOptions.recursive}
-                      onChange={(e) =>
-                        setFolderShareOptions({
-                          ...folderShareOptions,
-                          recursive: e.target.checked,
-                        })
-                      }
-                      className="h-4 w-4 rounded border-gray-300"
+                      disabled
+                      aria-disabled
+                      title="Disabled: large-folder sharing is currently not supported"
+                      className="h-4 w-4 rounded border-gray-300 cursor-not-allowed opacity-60"
                     />
                   </div>
 
@@ -310,13 +355,10 @@ export default function ShareModal({
                       id="snapshot"
                       type="checkbox"
                       checked={folderShareOptions.snapshotMode}
-                      onChange={(e) =>
-                        setFolderShareOptions({
-                          ...folderShareOptions,
-                          snapshotMode: e.target.checked,
-                        })
-                      }
-                      className="h-4 w-4 rounded border-gray-300"
+                      disabled
+                      aria-disabled
+                      title="Disabled: snapshot/archive workflow not yet available"
+                      className="h-4 w-4 rounded border-gray-300 cursor-not-allowed opacity-60"
                     />
                   </div>
                 </div>
@@ -377,15 +419,21 @@ export default function ShareModal({
             >
               <div className="space-y-2">
                 <Label htmlFor="target-user">User Email</Label>
+                {userShareSuccess && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-md p-2 text-emerald-800 text-sm">
+                    {userShareSuccess}
+                  </div>
+                )}
                 <Input
                   id="target-user"
                   value={userShareData.targetUserEmail}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setUserShareData({
                       ...userShareData,
                       targetUserEmail: e.target.value,
-                    })
-                  }
+                    });
+                    setUserShareSuccess(null);
+                  }}
                   placeholder="Enter user email to share with"
                 />
                 <p className="text-xs text-muted-foreground">
@@ -394,20 +442,16 @@ export default function ShareModal({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="permission">Permission Level</Label>
+                <Label htmlFor="permission">
+                  Permission Level (Coming soon)
+                </Label>
                 <select
                   id="permission"
                   value={userShareData.permission}
-                  onChange={(e) =>
-                    setUserShareData({
-                      ...userShareData,
-                      permission: e.target.value,
-                    })
-                  }
+                  disabled
                   className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
                 >
-                  <option value="read">Read Only</option>
-                  <option value="write">Read & Write</option>
+                  <option value="coming-soon">Coming soon</option>
                 </select>
               </div>
 
@@ -423,7 +467,7 @@ export default function ShareModal({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 pt-4">
+        <div className="flex justify-end ">
           <Button variant="outline" onClick={handleClose}>
             Close
           </Button>

@@ -110,7 +110,7 @@ body {
   background: var(--drive-surface);
   border: 1px solid var(--drive-border);
   border-radius: 0.5rem;
-
+  margin: 0rem 0.15rem 0rem 0.15rem;
   transition: var(--transition-smooth);
 }
 .drive-surface:focus {

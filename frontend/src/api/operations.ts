@@ -239,27 +239,55 @@ export const folderOperationsApi = {
     }
   },
 
-  // Create a public share for a folder using new folder share API
+  // Create a public share for a folder
   async createPublicFolderShare(
     folderId: string,
-    shareData: CreatePublicShareRequest & {
-      recursive?: boolean;
-      snapshotMode?: boolean;
-    } = {}
+    shareData: CreatePublicShareRequest
   ): Promise<FolderShareResponse> {
     try {
-      const response = await axios.post(`/api/v1/folder-shares`, {
-        folderId,
+      const payload: {
+        title?: string;
+        description?: string;
+        expiresAt?: string | null;
+      } = {
         title: shareData.title,
         description: shareData.description,
-        recursive: shareData.recursive || false,
-        snapshotMode: shareData.snapshotMode || false,
-        expiresAt: shareData.expiresAt,
-      });
+        expiresAt: shareData.expiresAt ? shareData.expiresAt : null,
+      };
+
+      const response = await axios.post(
+        `/api/v1/shares/folders/${folderId}/share`,
+        payload
+      );
       return response.data;
     } catch (error) {
       throw new Error(
         `Failed to create folder share: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  },
+
+  // Create a protected folder share (requires authentication)
+  async createFolderShare(
+    shareData: CreateFolderShareRequest
+  ): Promise<FolderShareInfo> {
+    try {
+      const payload = {
+        folderId: shareData.folderId,
+        title: shareData.title,
+        description: shareData.description,
+        recursive: shareData.recursive,
+        snapshotMode: shareData.snapshotMode,
+        expiresAt: shareData.expiresAt ? shareData.expiresAt : null,
+      };
+
+      const response = await axios.post(`/api/v1/folder-shares`, payload);
+      return response.data as FolderShareInfo;
+    } catch (error) {
+      throw new Error(
+        `Failed to create protected folder share: ${
           error instanceof Error ? error.message : "Unknown error"
         }`
       );
