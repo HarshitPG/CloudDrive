@@ -14,7 +14,11 @@ import Breadcrumbs, { type Crumb } from "@/components/ui/Breadcrumbs";
 import axios from "@/lib/axios";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { sharedApi } from "@/api/operations";
+import {
+  sharedApi,
+  publicShareApi,
+  folderOperationsApi,
+} from "@/api/operations";
 import { downloadUrlToFile } from "@/lib/utils";
 import FullscreenPreviewModal from "@/components/FullscreenPreviewModal";
 
@@ -26,6 +30,7 @@ type SharedFile = {
   createdAt: string;
   updatedAt: string;
   downloadCount: number;
+  ownerEmail?: string;
 };
 
 type SharedFolder = {
@@ -33,7 +38,13 @@ type SharedFolder = {
   name: string;
   createdAt: string;
   updatedAt: string;
+  size?: number;
+  ownerEmail?: string;
 };
+
+type GridItem =
+  | (SharedFolder & { _type: "folder" })
+  | (SharedFile & { _type: "file" });
 
 export default function SharedView() {
   const navigate = useNavigate();
@@ -121,10 +132,74 @@ export default function SharedView() {
     navigate(`/dashboard/shared/folder/${f.id}`);
   };
 
+  const [downloadingFolderId, setDownloadingFolderId] = useState<string | null>(
+    null
+  );
+
+  const handleDownloadFolder = async (folder: SharedFolder) => {
+    setDownloadingFolderId(folder.id);
+    try {
+      // Try to use share-specific download endpoint first
+      try {
+        const res = await axios.get(
+          `/api/v1/shares/folders/${folder.id}/download`
+        );
+        // If endpoint returns a downloadUrl string or blob, handle accordingly
+        if (res.data?.downloadUrl) {
+          await downloadUrlToFile(
+            res.data.downloadUrl as string,
+            `${folder.name}.zip`
+          );
+          return;
+        }
+      } catch (err) {
+        // ignore and fallback to snapshot share approach
+        console.debug("share-specific download failed, falling back", err);
+      }
+
+      // Fallback: create a temporary snapshot public share and download archive via token
+      const share = await folderOperationsApi.createPublicFolderShare(
+        folder.id,
+        {
+          snapshotMode: true,
+          recursive: true,
+        }
+      );
+      try {
+        const blob = await publicShareApi.downloadFolderArchive(share.token);
+        const filename = `${folder.name || "folder"}.zip`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } finally {
+        try {
+          await folderOperationsApi.revokeFolderShare(share.shareId);
+        } catch (err) {
+          console.warn("Failed to revoke temporary folder share", err);
+        }
+      }
+    } catch (err) {
+      console.error("Folder download failed", err);
+    } finally {
+      setDownloadingFolderId(null);
+    }
+  };
+
   const handleBreadcrumbClick = (id?: string) => {
     if (!id) navigate(`/dashboard/shared`);
     else navigate(`/dashboard/shared/folder/${id}`);
   };
+
+  // merged grid items (folders first, then files)
+  const gridItems: GridItem[] = [
+    ...folders.map((f) => ({ ...f, _type: "folder" as const })),
+    ...files.map((fi) => ({ ...fi, _type: "file" as const })),
+  ];
 
   return (
     <motion.div
@@ -174,59 +249,94 @@ export default function SharedView() {
       ) : (
         <>
           <div className="space-y-8">
-            {folders.length > 0 && (
-              <section>
-                <h2 className="text-lg font-semibold mb-3">Folders</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {folders.map((f) => (
-                    <Card
-                      key={f.id}
-                      className="drive-card hover:shadow-sm transition"
-                      onClick={() => handleOpenFolder(f)}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/10 text-primary">
-                            <Folder className="w-5 h-5" />
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              className="h-8 w-8 p-0"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenFolder(f);
-                              }}
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
+            <section>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {gridItems.map((item: GridItem) => {
+                  if (item._type === "folder") {
+                    const f: SharedFolder = item as SharedFolder;
+                    return (
+                      <Card
+                        key={f.id}
+                        className="drive-card hover:shadow-sm transition"
+                        onClick={() => handleOpenFolder(f)}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/10 text-primary">
+                              <Folder className="w-5 h-5" />
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                className="h-8 w-8 p-0"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  // Try shared API first
+                                  try {
+                                    const res = await sharedApi.downloadFolder(
+                                      f.id
+                                    );
+                                    if (res?.downloadUrl) {
+                                      await downloadUrlToFile(
+                                        res.downloadUrl,
+                                        `${f.name}.zip`
+                                      );
+                                      return;
+                                    }
+                                  } catch (err) {
+                                    console.debug(
+                                      "sharedApi.downloadFolder failed, falling back",
+                                      err
+                                    );
+                                  }
 
-                        <h3 className="font-medium text-foreground text-sm mb-2 truncate">
-                          {f.name}
-                        </h3>
-
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>
-                              {new Date(f.createdAt).toLocaleDateString()}
-                            </span>
-                            <span>-</span>
+                                  await handleDownloadFolder(f);
+                                }}
+                                disabled={downloadingFolderId === f.id}
+                              >
+                                <Download className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="h-8 w-8 p-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenFolder(f);
+                                }}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </section>
-            )}
 
-            {files.length > 0 && (
-              <section>
-                <h2 className="text-lg font-semibold mb-3">Files</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {files.map((file) => (
+                          <h3 className="font-medium text-foreground text-sm mb-2 truncate">
+                            {f.name}
+                          </h3>
+
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>
+                                {new Date(f.createdAt).toLocaleDateString()}
+                              </span>
+                              <span>
+                                {f.size
+                                  ? `${Math.round(f.size / 1024)} KB`
+                                  : "-"}
+                              </span>
+                            </div>
+                            {f.ownerEmail && (
+                              <div className="text-xs text-muted-foreground">
+                                Shared by: {f.ownerEmail}
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  }
+
+                  const file: SharedFile = item as SharedFile;
+                  return (
                     <Card
                       key={file.id}
                       className="drive-card hover:shadow-sm transition"
@@ -294,13 +404,18 @@ export default function SharedView() {
                               {Math.round((file.size || 0) / 1024)} KB
                             </span>
                           </div>
+                          {file.ownerEmail && (
+                            <div className="text-xs text-muted-foreground">
+                              Shared by: {file.ownerEmail}
+                            </div>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
-                </div>
-              </section>
-            )}
+                  );
+                })}
+              </div>
+            </section>
           </div>
           <FullscreenPreviewModal
             open={previewOpen}

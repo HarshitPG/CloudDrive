@@ -49,7 +49,11 @@ import {
   type SearchFilters,
   type FileSearchResult,
 } from "../../api/search";
-import { fileOperationsApi, folderOperationsApi } from "../../api/operations";
+import {
+  fileOperationsApi,
+  folderOperationsApi,
+  publicShareApi,
+} from "../../api/operations";
 import { downloadUrlToFile } from "@/lib/utils";
 import { UploadList } from "@/components/upload/UploadList";
 import { uploadManager } from "@/lib/uploadManager";
@@ -312,20 +316,45 @@ export default function Home() {
 
   // Operation handlers
   const handleDownload = async (item: DriveItem) => {
-    if (item.type === "folder") {
-      setToastMessage("Folder download not supported yet");
-      return;
-    }
-
     setLoadingStates((prev) => ({ ...prev, [item.id]: "download" }));
-
     try {
-      const result = await fileOperationsApi.downloadFile(item.id);
-      // Programmatic download that saves to device rather than navigating
-      const filename =
-        "filename" in item && item.filename ? item.filename : item.name;
-      await downloadUrlToFile(result.downloadUrl, filename);
-      setToastMessage("Download completed");
+      if (item.type === "file") {
+        const result = await fileOperationsApi.downloadFile(item.id);
+        // Programmatic download that saves to device rather than navigating
+        const filename =
+          "filename" in item && item.filename ? item.filename : item.name;
+        await downloadUrlToFile(result.downloadUrl, filename);
+        setToastMessage("Download completed");
+      } else {
+        // Create a temporary snapshot public share for this folder, download archive, then revoke
+        const share = await folderOperationsApi.createPublicFolderShare(
+          item.id,
+          {
+            snapshotMode: true,
+            recursive: true,
+          }
+        );
+        try {
+          const blob = await publicShareApi.downloadFolderArchive(share.token);
+          const filename = `${item.name || "folder"}.zip`;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          setToastMessage("Folder download started");
+        } finally {
+          // best-effort revoke of temporary share
+          try {
+            await folderOperationsApi.revokeFolderShare(share.shareId);
+          } catch (err) {
+            console.warn("Failed to revoke temporary folder share", err);
+          }
+        }
+      }
     } catch (error) {
       console.error("Download failed:", error);
       setToastMessage(
@@ -612,6 +641,19 @@ export default function Home() {
 
                     {item.type === "folder" && (
                       <>
+                        <DropdownMenuItem
+                          onClick={(e: MouseEvent) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            handleDownload(item);
+                          }}
+                          disabled={!!isLoading}
+                        >
+                          <Download className="w-4 h-4 mr-2" />
+                          {isLoading === "download"
+                            ? "Downloading..."
+                            : "Download"}
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={(e: MouseEvent) => {
                             e.stopPropagation();

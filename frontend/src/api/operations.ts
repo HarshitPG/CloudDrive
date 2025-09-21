@@ -367,6 +367,23 @@ export const sharedApi = {
     );
     return response.data as SharedWithMeResponse;
   },
+  // Attempt to get a download URL or start a download for a shared folder by id
+  async downloadFolder(
+    folderId: string
+  ): Promise<{ downloadUrl?: string } | null> {
+    try {
+      const response = await axios.get(
+        `/api/v1/shares/folders/${folderId}/download`
+      );
+      return response.data || null;
+    } catch (error) {
+      throw new Error(
+        `Failed to download shared folder: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  },
 };
 
 // Public share resolution API
@@ -388,6 +405,39 @@ export const publicShareApi = {
           error instanceof Error ? error.message : "Unknown error"
         }`
       );
+    }
+  },
+
+  // Get direct contents for a folder within a public share (lighter-weight)
+  async getContents(
+    token: string,
+    folderId?: string
+  ): Promise<SharedFolderData> {
+    try {
+      const url = folderId
+        ? `/api/v1/fs/${token}/contents?folderId=${folderId}`
+        : `/api/v1/fs/${token}/contents`;
+      const response = await axios.get(url);
+      return response.data;
+    } catch (error) {
+      // fallback to resolveFolderShare
+      return this.resolveFolderShare(token, folderId);
+    }
+  },
+
+  // Get ancestor chain for a folder within a public share
+  async getAncestors(
+    token: string,
+    folderId?: string
+  ): Promise<{ id: string; name: string }[]> {
+    try {
+      const url = folderId
+        ? `/api/v1/fs/${token}/ancestors?folderId=${folderId}`
+        : `/api/v1/fs/${token}/ancestors`;
+      const response = await axios.get(url);
+      return response.data.ancestors || [];
+    } catch (error) {
+      return [];
     }
   },
 

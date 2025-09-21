@@ -290,24 +290,19 @@ export default function PublicShareView() {
       setError(null);
 
       try {
-        const result = await publicShareApi.resolveFolderShare(token, folderId);
+        // Use lightweight per-folder contents endpoint when possible
+        const result = await publicShareApi.getContents(token, folderId);
         setData(result);
-        setAllItems(result.items);
 
-        const filteredItems = result.items.filter((item) => {
-          if (!folderId) {
-            return item.parentId === result.share.folderId;
-          } else {
-            return item.parentId === folderId;
-          }
-        });
+        // current items are those returned (direct children)
+        setCurrentItems(result.items || []);
 
-        setCurrentItems(filteredItems);
-
+        // build breadcrumbs using ancestors endpoint when inside a folder
         if (!folderId) {
           setBreadcrumbPath([]);
         } else {
-          buildBreadcrumbPath(folderId, result.items, result.share.folderId);
+          const ancestors = await publicShareApi.getAncestors(token, folderId);
+          setBreadcrumbPath(ancestors.map((a) => ({ id: a.id, name: a.name })));
         }
       } catch (err: unknown) {
         const message =
@@ -318,7 +313,7 @@ export default function PublicShareView() {
         setLoading(false);
       }
     },
-    [token, buildBreadcrumbPath]
+    [token]
   );
 
   useEffect(() => {
