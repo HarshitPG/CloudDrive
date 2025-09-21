@@ -24,6 +24,7 @@ func RegisterFolderRoutes(rg *gin.RouterGroup, db *sql.DB, jwtSecret string, c c
 	folders.GET("/:id/contents", h.listContents)
 	folders.GET("/:id/files", h.listFilesInFolder)
 	folders.GET("/:id/tree", h.getTree)
+	folders.GET("/:id/ancestors", h.getAncestors)
 	folders.PATCH("/:id", h.rename)
 	folders.DELETE("/:id", h.delete)
 	folders.POST("/:id/move", h.move)
@@ -484,6 +485,51 @@ func (h *folderHandler) getTree(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, tree)
+}
+
+// getAncestors returns the ancestor chain for a folder owned by the authenticated user.
+// Response: [{id,name}, ...] ordered root -> current
+func (h *folderHandler) getAncestors(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	folderID := c.Param("id")
+
+	rows, err := h.db.QueryContext(c.Request.Context(), `
+		WITH RECURSIVE anc AS (
+			SELECT id, parent_id, name FROM folders WHERE id=$1 AND user_id=$2
+			UNION ALL
+			SELECT f.id, f.parent_id, f.name FROM folders f
+			JOIN anc a ON f.id = a.parent_id
+			WHERE f.user_id = $2
+		)
+		SELECT id, name FROM anc
+	`, folderID, userID)
+	if err != nil {
+		logger.L.Error("folders.getAncestors: query failed", zap.Error(err), zap.String("folderID", folderID), zap.String("userID", userID))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+	defer rows.Close()
+
+	type ancRow struct{ id, name string }
+	list := make([]ancRow, 0)
+	for rows.Next() {
+		var a ancRow
+		if err := rows.Scan(&a.id, &a.name); err != nil {
+			continue
+		}
+		list = append(list, a)
+	}
+
+	// rows come current->parent->...; reverse to root->current
+	for i, j := 0, len(list)-1; i < j; i, j = i+1, j-1 {
+		list[i], list[j] = list[j], list[i]
+	}
+
+	out := make([]map[string]string, 0, len(list))
+	for _, a := range list {
+		out = append(out, map[string]string{"id": a.id, "name": a.name})
+	}
+	c.JSON(http.StatusOK, gin.H{"ancestors": out})
 }
 
 func (h *folderHandler) buildFolderTree(c *gin.Context, userID, folderID string) (map[string]interface{}, error) {

@@ -26,11 +26,14 @@ func RegisterShareRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStora
 	h := &shareHandler{db: db, storage: st, cache: c}
 
 	protected.POST("/files/:id/share", h.createPublicFileShare)
+	protected.GET("/files/:id/download", h.downloadSharedFile)
 	protected.DELETE("/shares/:id", h.revokeShare)
 	protected.POST("/files/:id/share/user", h.shareFileToUser)
 	protected.GET("/files/:id/shares", h.listFileShares)
 	protected.POST("/folders/:id/share", h.createPublicFolderShare)
 	protected.POST("/folders/:id/share/user", h.shareFolderToUser)
+	protected.GET("/folders/:id/contents", h.listSharedFolderContents)
+	protected.GET("/folders/:id/ancestors", h.listSharedFolderAncestors)
 	protected.GET("/shared-with-me", h.listSharedWithMe)
 }
 
@@ -447,6 +450,261 @@ func (h *shareHandler) revokeShare(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "revoked"})
+}
+
+// listSharedFolderContents lists immediate child folders and files of a folder that the current user can access via a folder share (on this folder or any ancestor).
+func (h *shareHandler) listSharedFolderContents(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	folderID := c.Param("id")
+
+	// Authorization: user must have a folder share on this folder or an ancestor
+	var authorized int
+	authErr := h.db.QueryRowContext(c.Request.Context(), `
+		WITH RECURSIVE ancestors AS (
+			SELECT id, parent_id FROM folders WHERE id = $1 AND deleted_at IS NULL
+			UNION ALL
+			SELECT f.id, f.parent_id FROM folders f
+			JOIN ancestors a ON f.id = a.parent_id
+		)
+		SELECT 1
+		FROM shares s
+		JOIN share_users su ON su.share_id = s.id
+		WHERE su.target_user_id = $2
+		  AND s.target_type = 'folder'
+		  AND s.revoked = false
+		  AND s.target_id IN (SELECT id FROM ancestors)
+		LIMIT 1
+	`, folderID, userID).Scan(&authorized)
+	if authErr != nil {
+		if authErr == sql.ErrNoRows {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized"})
+			return
+		}
+		logger.L.Error("shares.listSharedFolderContents: auth query failed", zap.Error(authErr))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+
+	// Fetch current folder name and parent for breadcrumb
+	var curName string
+	var parentID sql.NullString
+	if err := h.db.QueryRowContext(c.Request.Context(),
+		"SELECT name, parent_id::text FROM folders WHERE id=$1 AND deleted_at IS NULL",
+		folderID,
+	).Scan(&curName, &parentID); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "folder not found"})
+			return
+		}
+		logger.L.Error("shares.listSharedFolderContents: fetch current folder failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+
+	// List child folders
+	fRows, err := h.db.QueryContext(c.Request.Context(), `
+		SELECT id, name, created_at
+		FROM folders
+		WHERE parent_id = $1 AND deleted_at IS NULL
+		ORDER BY created_at DESC
+	`, folderID)
+	if err != nil {
+		logger.L.Error("shares.listSharedFolderContents: subfolders query failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+	defer fRows.Close()
+	subfolders := make([]map[string]interface{}, 0)
+	for fRows.Next() {
+		var id, name string
+		var createdAt interface{}
+		if err := fRows.Scan(&id, &name, &createdAt); err == nil {
+			subfolders = append(subfolders, gin.H{
+				"id":        id,
+				"name":      name,
+				"createdAt": createdAt,
+			})
+		}
+	}
+
+	// List files in this folder
+	fileRows, err := h.db.QueryContext(c.Request.Context(), `
+		SELECT uf.id, uf.filename, uf.declared_mime, uf.original_size_bytes, uf.created_at
+		FROM user_files uf
+		WHERE uf.folder_id = $1 AND uf.deleted_at IS NULL
+		ORDER BY uf.created_at DESC
+	`, folderID)
+	if err != nil {
+		logger.L.Error("shares.listSharedFolderContents: files query failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+	defer fileRows.Close()
+	files := make([]map[string]interface{}, 0)
+	for fileRows.Next() {
+		var id, filename, mime string
+		var size int64
+		var createdAt interface{}
+		if err := fileRows.Scan(&id, &filename, &mime, &size, &createdAt); err == nil {
+			files = append(files, gin.H{
+				"id":        id,
+				"filename":  filename,
+				"mime":      mime,
+				"size":      size,
+				"createdAt": createdAt,
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"folders": subfolders,
+		"files":   files,
+		"current": gin.H{
+			"id":   folderID,
+			"name": curName,
+			"parentId": func() interface{} {
+				if parentID.Valid {
+					return parentID.String
+				}
+				return nil
+			}(),
+		},
+	})
+}
+
+// downloadSharedFile returns a presigned download URL for a file that the current user can access via a direct file share or via a folder share ancestor.
+func (h *shareHandler) downloadSharedFile(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	fileID := c.Param("id")
+
+	// Fetch file content and its folder
+	var (
+		folderID string
+		blobKey  string
+		filename string
+	)
+	err := h.db.QueryRowContext(c.Request.Context(), `
+		SELECT COALESCE(uf.folder_id::text, ''), fc.blob_key, uf.filename
+		FROM user_files uf
+		JOIN file_contents fc ON uf.content_id = fc.id
+		WHERE uf.id = $1 AND uf.deleted_at IS NULL
+	`, fileID).Scan(&folderID, &blobKey, &filename)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+			return
+		}
+		logger.L.Error("shares.downloadSharedFile: fetch file failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+
+	// Check direct file share
+	var hasDirect int
+	derr := h.db.QueryRowContext(c.Request.Context(), `
+		SELECT 1 FROM shares s
+		JOIN share_users su ON su.share_id = s.id
+		WHERE s.target_type = 'file' AND s.target_id = $1 AND s.revoked = false AND su.target_user_id = $2
+		LIMIT 1
+	`, fileID, userID).Scan(&hasDirect)
+
+	allowed := derr == nil
+	if !allowed {
+		// Check folder share via ancestors of the file's folder
+		var hasFolder int
+		ferr := h.db.QueryRowContext(c.Request.Context(), `
+			WITH RECURSIVE ancestors AS (
+				SELECT id, parent_id FROM folders WHERE id = NULLIF($1, '')::uuid
+				UNION ALL
+				SELECT f.id, f.parent_id FROM folders f
+				JOIN ancestors a ON f.id = a.parent_id
+			)
+			SELECT 1
+			FROM shares s
+			JOIN share_users su ON su.share_id = s.id
+			WHERE su.target_user_id = $2
+			  AND s.target_type = 'folder'
+			  AND s.revoked = false
+			  AND s.target_id IN (SELECT id FROM ancestors)
+			LIMIT 1
+		`, folderID, userID).Scan(&hasFolder)
+		allowed = ferr == nil
+	}
+
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized"})
+		return
+	}
+
+	url, perr := h.storage.PresignedGetURL(c.Request.Context(), blobKey, 15)
+	if perr != nil {
+		logger.L.Error("shares.downloadSharedFile: presign failed", zap.Error(perr))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"downloadUrl": url, "filename": filename})
+}
+
+// listSharedFolderAncestors returns the ancestor chain for a shared folder (root->current) if the user has access via a share.
+func (h *shareHandler) listSharedFolderAncestors(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	folderID := c.Param("id")
+
+	// Verify access via share (folder share on ancestor or self)
+	var ok int
+	if err := h.db.QueryRowContext(c.Request.Context(), `
+		WITH RECURSIVE ancestors AS (
+			SELECT id FROM folders WHERE id = $1
+			UNION ALL
+			SELECT f.parent_id FROM folders f JOIN ancestors a ON f.id = a.id
+		)
+		SELECT 1 FROM shares s JOIN share_users su ON su.share_id = s.id
+		WHERE su.target_user_id = $2 AND s.target_type='folder' AND s.revoked=false AND s.target_id IN (SELECT id FROM ancestors) LIMIT 1
+	`, folderID, userID).Scan(&ok); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized"})
+			return
+		}
+		logger.L.Error("shares.listSharedFolderAncestors: auth check failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+
+	// Collect ancestors by walking up parent_id
+	rows, err := h.db.QueryContext(c.Request.Context(), `
+		WITH RECURSIVE anc AS (
+			SELECT id, parent_id, name FROM folders WHERE id = $1
+			UNION ALL
+			SELECT f.id, f.parent_id, f.name FROM folders f JOIN anc a ON f.id = a.parent_id
+		)
+		SELECT id, name FROM anc
+	`, folderID)
+	if err != nil {
+		logger.L.Error("shares.listSharedFolderAncestors: query failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
+		return
+	}
+	defer rows.Close()
+
+	type aRow struct{ id, name string }
+	arr := []aRow{}
+	for rows.Next() {
+		var a aRow
+		if err := rows.Scan(&a.id, &a.name); err == nil {
+			arr = append(arr, a)
+		}
+	}
+	// reverse to root->current
+	for i, j := 0, len(arr)-1; i < j; i, j = i+1, j-1 {
+		arr[i], arr[j] = arr[j], arr[i]
+	}
+
+	out := make([]map[string]string, 0, len(arr))
+	for _, v := range arr {
+		out = append(out, map[string]string{"id": v.id, "name": v.name})
+	}
+	c.JSON(http.StatusOK, gin.H{"ancestors": out})
 }
 
 // listSharedWithMe returns files and folders shared with the authenticated user
