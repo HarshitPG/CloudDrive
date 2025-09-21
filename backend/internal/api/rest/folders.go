@@ -1,12 +1,15 @@
 package rest
 
 import (
+	"archive/zip"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"backend/internal/auth"
 	"backend/internal/cache"
+	"backend/internal/storage"
 	"backend/internal/worker"
 	"backend/pkg/logger"
 
@@ -14,16 +17,17 @@ import (
 	"go.uber.org/zap"
 )
 
-func RegisterFolderRoutes(rg *gin.RouterGroup, db *sql.DB, jwtSecret string, c cache.Cache) {
+func RegisterFolderRoutes(rg *gin.RouterGroup, db *sql.DB, jwtSecret string, c cache.Cache, st *storage.MinioStorage) {
 	folders := rg.Group("/folders")
 	folders.Use(auth.RequireAuth(jwtSecret))
-	h := &folderHandler{db: db, cache: c, producer: worker.NewProducer()}
+	h := &folderHandler{db: db, cache: c, producer: worker.NewProducer(), storage: st}
 
 	folders.GET("", h.listPrimary)
 	folders.POST("", h.create)
 	folders.GET("/:id/contents", h.listContents)
 	folders.GET("/:id/files", h.listFilesInFolder)
 	folders.GET("/:id/tree", h.getTree)
+	folders.GET("/:id/download", h.downloadArchive)
 	folders.GET("/:id/ancestors", h.getAncestors)
 	folders.PATCH("/:id", h.rename)
 	folders.DELETE("/:id", h.delete)
@@ -34,6 +38,7 @@ type folderHandler struct {
 	db       *sql.DB
 	cache    cache.Cache
 	producer *worker.Producer
+	storage  *storage.MinioStorage
 }
 
 type createFolderRequest struct {
@@ -397,6 +402,66 @@ func (h *folderHandler) rename(c *gin.Context) {
 	}
 	cache.InvalidateFolder(c.Request.Context(), h.cache, folderID)
 	c.JSON(http.StatusOK, gin.H{"message": "folder renamed"})
+}
+
+// downloadArchive streams the folder contents as a ZIP archive to the authenticated owner
+func (h *folderHandler) downloadArchive(c *gin.Context) {
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	folderID := c.Param("id")
+
+	var owner string
+	if err := h.db.QueryRowContext(c.Request.Context(), `SELECT user_id FROM folders WHERE id=$1 AND deleted_at IS NULL`, folderID).Scan(&owner); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "folder not found"})
+		return
+	}
+	if owner != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized"})
+		return
+	}
+
+	recursive := c.Query("recursive") == "true"
+
+	// Get files
+	var items []shareItem
+	if recursive {
+		items, _ = getRecursiveItemsStandalone(c.Request.Context(), h.db, folderID, owner)
+	} else {
+		items, _ = getDirectItemsStandalone(c.Request.Context(), h.db, folderID, owner)
+	}
+
+	var files []shareItem
+	for _, it := range items {
+		if it.Type == "file" {
+			files = append(files, it)
+		}
+	}
+
+	if len(files) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no files found in folder"})
+		return
+	}
+
+	// Get folder name for zip filename
+	var folderName string
+	_ = h.db.QueryRowContext(c.Request.Context(), `SELECT name FROM folders WHERE id=$1`, folderID).Scan(&folderName)
+	if folderName == "" {
+		folderName = "folder"
+	}
+
+	zipFilename := folderName + ".zip"
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", zipFilename))
+	c.Header("Cache-Control", "no-cache")
+
+	zipWriter := zip.NewWriter(c.Writer)
+	defer zipWriter.Close()
+
+	for _, file := range files {
+		if err := addFileToZip(c.Request.Context(), h.db, h.storage, zipWriter, file); err != nil {
+			logger.L.Warn("failed to add file to zip", zap.String("fileId", file.ID), zap.Error(err))
+			continue
+		}
+	}
 }
 
 type moveFolderRequest struct {
