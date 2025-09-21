@@ -66,6 +66,7 @@ func (h *fileHandler) download(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 			return
 		}
+		logger.L.Error("db select user_files failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
@@ -172,6 +173,7 @@ func (h *fileHandler) delete(c *gin.Context) {
 		if _, err := tx.ExecContext(ctx,
 			"UPDATE user_files SET deleted_at = now() WHERE id=$1", fileId); err != nil {
 			_ = tx.Rollback()
+			logger.L.Error("soft-delete update user_files failed", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 			return
 		}
@@ -179,6 +181,7 @@ func (h *fileHandler) delete(c *gin.Context) {
 		if _, err := tx.ExecContext(ctx,
 			"UPDATE file_contents SET ref_count = GREATEST(ref_count - 1, 0) WHERE id=$1", contentID); err != nil {
 			_ = tx.Rollback()
+			logger.L.Error("soft-delete update file_contents ref_count failed", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 			return
 		}
@@ -188,6 +191,7 @@ func (h *fileHandler) delete(c *gin.Context) {
 			"UPDATE shares SET revoked=true WHERE target_type='file' AND target_id=$1", fileId)
 
 		if err := tx.Commit(); err != nil {
+			logger.L.Error("soft-delete tx commit failed", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "commit failed"})
 			return
 		}
@@ -227,6 +231,7 @@ func (h *fileHandler) delete(c *gin.Context) {
 	// Delete the user_files row
 	if _, err := tx.ExecContext(ctx, "DELETE FROM user_files WHERE id=$1", fileId); err != nil {
 		_ = tx.Rollback()
+		logger.L.Error("permanent delete: delete user_files failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
@@ -237,23 +242,38 @@ func (h *fileHandler) delete(c *gin.Context) {
 		contentID,
 	).Scan(&refCount); err != nil {
 		_ = tx.Rollback()
+		logger.L.Error("permanent delete: update file_contents ref_count failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
 		return
 	}
 
 	// Schedule GC only on permanent delete when ref_count hits 0
 	if refCount == 0 {
-		if h.producer != nil {
-			_ = h.producer.PublishGCJob(ctx, worker.GCJob{
-				ContentID: contentID,
-				BlobKey:   blobKey,
-			})
+		// Double-check there are no remaining user_files referencing this content (race-safe guard)
+		var remaining int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM user_files WHERE content_id=$1", contentID).Scan(&remaining); err != nil {
+			logger.L.Error("permanent delete: count remaining user_files failed", zap.Error(err), zap.String("contentID", contentID))
 		}
-		// Remove file_contents metadata from DB since no more references exist
-		if _, err := tx.ExecContext(ctx, "DELETE FROM file_contents WHERE id=$1", contentID); err != nil {
-			_ = tx.Rollback()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal"})
-			return
+		if remaining > 0 {
+			logger.L.Warn("permanent delete: found remaining user_files, skipping file_contents deletion", zap.Int("remaining", remaining), zap.String("contentID", contentID))
+		} else {
+			// Attempt immediate blob deletion; if it fails, fall back to GC job
+			if h.storage != nil && h.storage.Client != nil {
+				if err := h.storage.Client.RemoveObject(ctx, h.storage.Bucket, blobKey, storage.MinioRemoveOpts()); err != nil {
+					logger.L.Warn("direct blob delete failed; scheduling GC", zap.Error(err))
+					if h.producer != nil {
+						_ = h.producer.PublishGCJob(ctx, worker.GCJob{ContentID: contentID, BlobKey: blobKey})
+					}
+				}
+			} else if h.producer != nil {
+				_ = h.producer.PublishGCJob(ctx, worker.GCJob{ContentID: contentID, BlobKey: blobKey})
+			}
+
+			// Remove file_contents metadata from DB since no more references exist
+			if _, err := tx.ExecContext(ctx, "DELETE FROM file_contents WHERE id=$1", contentID); err != nil {
+				// Do not abort the whole operation for a race/constraint error; log and continue
+				logger.L.Error("permanent delete: delete file_contents failed, will continue and rely on GC", zap.Error(err), zap.String("contentID", contentID))
+			}
 		}
 	}
 
@@ -262,6 +282,7 @@ func (h *fileHandler) delete(c *gin.Context) {
 		"DELETE FROM shares WHERE target_type='file' AND target_id=$1", fileId)
 
 	if err := tx.Commit(); err != nil {
+		logger.L.Error("permanent delete: tx commit failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "commit failed"})
 		return
 	}

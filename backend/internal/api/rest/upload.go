@@ -394,19 +394,7 @@ func (h *uploadHandler) createSession(c *gin.Context) {
 			req.ClientSha256).Scan(&contentID, &sizeBytes)
 
 		if err == nil {
-			var existingUserFile string
-			err = h.db.QueryRowContext(c.Request.Context(),
-				"SELECT id FROM user_files WHERE user_id=$1 AND content_id=$2 AND deleted_at IS NULL LIMIT 1",
-				userID, contentID).Scan(&existingUserFile)
-			if err == nil {
-				c.JSON(http.StatusOK, createSessionResponse{
-					SkipUpload:     true,
-					ExistingFileId: existingUserFile,
-					UserFileId:     existingUserFile,
-				})
-				return
-			}
-
+			// Content exists: create a new user_files row (a new reference) and bump ref_count
 			tx, txErr := h.db.BeginTx(c.Request.Context(), nil)
 			if txErr != nil {
 				logger.L.Error("fastpath tx begin failed", zap.Error(txErr))
