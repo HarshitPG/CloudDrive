@@ -758,9 +758,9 @@ func (h *shareHandler) listSharedWithMe(c *gin.Context) {
 	for filesRows.Next() {
 		var (
 			id, filename, mime, ownerEmail string
-			size                 int64
-			createdAt, updatedAt time.Time
-			downloadCount        int64
+			size                           int64
+			createdAt, updatedAt           time.Time
+			downloadCount                  int64
 		)
 		if err := filesRows.Scan(&id, &filename, &mime, &size, &createdAt, &updatedAt, &downloadCount, &ownerEmail); err == nil {
 			sharedFiles = append(sharedFiles, map[string]interface{}{

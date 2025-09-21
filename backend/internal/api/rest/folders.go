@@ -266,7 +266,7 @@ func (h *folderHandler) listPrimary(c *gin.Context) {
 			out = append(out, item)
 			continue
 		}
-        
+
 	}
 
 	c.JSON(http.StatusOK, gin.H{

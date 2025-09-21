@@ -33,6 +33,9 @@ const (
 func RegisterFolderShareRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorage, jwtSecret string, c cache.Cache) {
 	// Public routes
 	rg.GET("/fs/:token", resolveFolderShareHandler(db, st, c))
+	// Per-folder contents and ancestors for faster nested browsing in public shares
+	rg.GET("/fs/:token/contents", resolveFolderShareContentsHandler(db, st, c))
+	rg.GET("/fs/:token/ancestors", resolveFolderShareAncestorsHandler(db, st, c))
 	rg.GET("/fs/:token/download/:fileId", downloadFromShareHandler(db, st, c))
 	rg.GET("/fs/:token/download", downloadFolderArchiveHandler(db, st, c))
 
@@ -515,6 +518,209 @@ func resolveFolderShareHandler(db *sql.DB, st *storage.MinioStorage, c cache.Cac
 		}
 
 		ctx.JSON(http.StatusOK, listing)
+	}
+}
+
+// resolveFolderShareContentsHandler returns only direct children for a given folderId
+func resolveFolderShareContentsHandler(db *sql.DB, st *storage.MinioStorage, c cache.Cache) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		token := ctx.Param("token")
+
+		// Validate share and get share info
+		var shareID, targetID string
+		var recursive bool
+		var expiresAt sql.NullTime
+
+		err := db.QueryRowContext(ctx.Request.Context(), `
+			SELECT id, target_id, recursive, expires_at
+			FROM shares
+			WHERE token=$1 AND target_type='folder' AND revoked=false
+		`, token).Scan(&shareID, &targetID, &recursive, &expiresAt)
+
+		if err != nil {
+			if err == sql.ErrNoRows {
+				ctx.JSON(http.StatusNotFound, gin.H{"error": "share not found"})
+				return
+			}
+			logger.L.Error("share lookup failed", zap.Error(err))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			return
+		}
+
+		// Check expiry
+		if expiresAt.Valid && expiresAt.Time.Before(time.Now()) {
+			ctx.JSON(http.StatusGone, gin.H{"error": "share expired"})
+			return
+		}
+
+		// folderId query param - if absent, use targetID
+		folderId := ctx.Query("folderId")
+		if folderId == "" {
+			folderId = targetID
+		}
+
+		// Get folder owner
+		var ownerID string
+		if err := db.QueryRowContext(ctx.Request.Context(), `SELECT user_id FROM folders WHERE id = $1 AND deleted_at IS NULL`, targetID).Scan(&ownerID); err != nil {
+			logger.L.Error("failed to get folder owner", zap.Error(err))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			return
+		}
+
+		// If share is recursive we still allow access to descendants, otherwise ensure folderId is direct child of target or equal to target
+		if !recursive {
+			// If requesting a folder other than target, ensure its parent is the target
+			if folderId != targetID {
+				var parentID sql.NullString
+				if err := db.QueryRowContext(ctx.Request.Context(), `SELECT parent_id FROM folders WHERE id=$1 AND deleted_at IS NULL`, folderId).Scan(&parentID); err != nil {
+					logger.L.Warn("parent lookup failed", zap.Error(err))
+					ctx.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+				if !parentID.Valid || parentID.String != targetID {
+					ctx.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		} else {
+			// For recursive shares we must ensure the requested folder is within the shared tree
+			var count int
+			if err := db.QueryRowContext(ctx.Request.Context(), `
+				WITH RECURSIVE folder_tree AS (
+					SELECT id FROM folders WHERE id = $1 AND deleted_at IS NULL
+					UNION ALL
+					SELECT f.id FROM folders f
+					INNER JOIN folder_tree ft ON f.parent_id = ft.id
+					WHERE f.deleted_at IS NULL
+				)
+				SELECT COUNT(*) FROM folder_tree WHERE id = $2
+			`, targetID, folderId).Scan(&count); err != nil || count == 0 {
+				ctx.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+				return
+			}
+		}
+
+		// Build response similar to resolveFolderShareHandler but only with direct children of folderId
+		items, total := getDirectItemsStandalone(ctx.Request.Context(), db, folderId, ownerID)
+
+		// get share info to include in response
+		var folderName string
+		_ = db.QueryRowContext(ctx.Request.Context(), `SELECT name FROM folders WHERE id=$1`, targetID).Scan(&folderName)
+
+		listing := folderShareListing{
+			Share: folderShareResponse{
+				ID:         shareID,
+				Token:      token,
+				URL:        "/fs/" + token,
+				FolderID:   targetID,
+				FolderName: folderName,
+				Recursive:  recursive,
+			},
+			Items:   items,
+			Total:   total,
+			HasMore: false,
+		}
+
+		ctx.JSON(http.StatusOK, listing)
+	}
+}
+
+// resolveFolderShareAncestorsHandler returns ancestor chain for a specified folder within a public share
+func resolveFolderShareAncestorsHandler(db *sql.DB, st *storage.MinioStorage, c cache.Cache) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		token := ctx.Param("token")
+
+		// Validate share and get share info
+		var shareID, targetID string
+		var recursive bool
+		var expiresAt sql.NullTime
+
+		err := db.QueryRowContext(ctx.Request.Context(), `
+			SELECT id, target_id, recursive, expires_at
+			FROM shares
+			WHERE token=$1 AND target_type='folder' AND revoked=false
+		`, token).Scan(&shareID, &targetID, &recursive, &expiresAt)
+
+		if err != nil {
+			if err == sql.ErrNoRows {
+				ctx.JSON(http.StatusNotFound, gin.H{"error": "share not found"})
+				return
+			}
+			logger.L.Error("share lookup failed", zap.Error(err))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			return
+		}
+
+		// Check expiry
+		if expiresAt.Valid && expiresAt.Time.Before(time.Now()) {
+			ctx.JSON(http.StatusGone, gin.H{"error": "share expired"})
+			return
+		}
+
+		folderId := ctx.Query("folderId")
+		if folderId == "" {
+			folderId = targetID
+		}
+
+		// ensure requested folder is inside shared tree (for recursive) or a direct child / target (for non-recursive)
+		if !recursive {
+			// allow only target folder or its direct children
+			if folderId != targetID {
+				var p sql.NullString
+				if err := db.QueryRowContext(ctx.Request.Context(), `SELECT parent_id FROM folders WHERE id=$1 AND deleted_at IS NULL`, folderId).Scan(&p); err != nil || !p.Valid || p.String != targetID {
+					ctx.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		} else {
+			var count int
+			if err := db.QueryRowContext(ctx.Request.Context(), `
+				WITH RECURSIVE folder_tree AS (
+					SELECT id FROM folders WHERE id = $1 AND deleted_at IS NULL
+					UNION ALL
+					SELECT f.id FROM folders f
+					INNER JOIN folder_tree ft ON f.parent_id = ft.id
+					WHERE f.deleted_at IS NULL
+				)
+				SELECT COUNT(*) FROM folder_tree WHERE id = $2
+			`, targetID, folderId).Scan(&count); err != nil || count == 0 {
+				ctx.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+				return
+			}
+		}
+
+		// get ancestors using WITH RECURSIVE
+		rows, err := db.QueryContext(ctx.Request.Context(), `
+			WITH RECURSIVE anc AS (
+				SELECT id, name, parent_id
+				FROM folders
+				WHERE id = $1 AND deleted_at IS NULL
+				UNION ALL
+				SELECT f.id, f.name, f.parent_id
+				FROM folders f
+				INNER JOIN anc a ON f.id = a.parent_id
+				WHERE f.deleted_at IS NULL
+			)
+			SELECT id, name FROM anc WHERE id != $1
+		`, folderId)
+
+		if err != nil {
+			logger.L.Error("ancestor query failed", zap.Error(err))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			return
+		}
+		defer rows.Close()
+
+		var ancestors []map[string]string
+		for rows.Next() {
+			var id, name string
+			if err := rows.Scan(&id, &name); err != nil {
+				continue
+			}
+			ancestors = append([]map[string]string{{"id": id, "name": name}}, ancestors...)
+		}
+
+		ctx.JSON(http.StatusOK, gin.H{"ancestors": ancestors})
 	}
 }
 
