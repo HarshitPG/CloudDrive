@@ -47,9 +47,43 @@ func BuildQuery(p Params) (string, string, []interface{}) {
 		argIdx++
 	}
 	if p.Mime != "" {
-		where = append(where, fmt.Sprintf("uf.declared_mime = $%d", argIdx))
-		args = append(args, p.Mime)
-		argIdx++
+		// Support prefix search: allow passing "image/" to match image/png, image/jpeg, etc.
+		if strings.HasSuffix(p.Mime, "/") {
+			where = append(where, fmt.Sprintf("uf.declared_mime ILIKE $%d", argIdx))
+			args = append(args, p.Mime+"%")
+			argIdx++
+		} else {
+			// Map some common filter MIME values to a group of real MIME types
+			mimeGroups := map[string][]string{
+				"application/vnd.ms-powerpoint": {
+					"application/vnd.ms-powerpoint",
+					"application/vnd.openxmlformats-officedocument.presentationml.presentation",
+				},
+				"application/msword": {
+					"application/msword",
+					"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+				},
+				"application/vnd.ms-excel": {
+					"application/vnd.ms-excel",
+					"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+				},
+			}
+
+			if group, ok := mimeGroups[p.Mime]; ok {
+				// Build OR clause for group
+				parts := []string{}
+				for _, m := range group {
+					parts = append(parts, fmt.Sprintf("uf.declared_mime = $%d", argIdx))
+					args = append(args, m)
+					argIdx++
+				}
+				where = append(where, "("+strings.Join(parts, " OR ")+")")
+			} else {
+				where = append(where, fmt.Sprintf("uf.declared_mime = $%d", argIdx))
+				args = append(args, p.Mime)
+				argIdx++
+			}
+		}
 	}
 	if p.MinSize != nil {
 		where = append(where, fmt.Sprintf("uf.original_size_bytes >= $%d", argIdx))

@@ -8,7 +8,6 @@ import (
 	"backend/pkg/logger"
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -16,6 +15,11 @@ import (
 )
 
 type Resolver struct{ DB *sql.DB }
+
+type queryResolver struct{ *Resolver }
+
+// Query returns generated.QueryResolver implementation.
+func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 
 func (r *queryResolver) SearchFiles(
 	ctx context.Context,
@@ -107,21 +111,35 @@ func (r *queryResolver) SearchFiles(
 
 	items := []*model.FileSearchResult{}
 	for rows.Next() {
-		f := &model.FileSearchResult{}
-		var createdAt, updatedAt time.Time
-		var rank *float64
+		var (
+			id, filename, mimeStr, contentHash string
+			size, physicalSize, refCount       int64
+			downloadCount                      int64
+			createdAt, updatedAt               time.Time
+			rank                               *float64
+		)
 		if scanErr := rows.Scan(
-			&f.ID, &f.Filename, &f.Mime, &f.Size,
-			&createdAt, &updatedAt, &f.DownloadCount,
-			&f.ContentHash, &f.PhysicalSize, &f.RefCount, &rank,
+			&id, &filename, &mimeStr, &size,
+			&createdAt, &updatedAt, &downloadCount,
+			&contentHash, &physicalSize, &refCount, &rank,
 		); scanErr != nil {
 			logger.L.Error("row scan failed", zap.Error(scanErr))
-			return nil, errors.New("internal scan error")
+			return nil, scanErr
 		}
 
-		f.CreatedAt = createdAt.Format(time.RFC3339)
-		f.UpdatedAt = updatedAt.Format(time.RFC3339)
-		f.DedupSavings = f.Size - f.PhysicalSize
+		f := &model.FileSearchResult{
+			ID:            id,
+			Filename:      filename,
+			Mime:          mimeStr,
+			Size:          int(size),
+			CreatedAt:     createdAt.Format(time.RFC3339),
+			UpdatedAt:     updatedAt.Format(time.RFC3339),
+			DownloadCount: int(downloadCount),
+			ContentHash:   contentHash,
+			PhysicalSize:  int(physicalSize),
+			RefCount:      int(refCount),
+			DedupSavings:  int(size - physicalSize),
+		}
 		if rank != nil {
 			f.Rank = rank
 		}
@@ -131,33 +149,147 @@ func (r *queryResolver) SearchFiles(
 	return &model.FileSearchResponse{
 		Items:  items,
 		Total:  int(total),
-		Limit:  p.Limit,
-		Offset: p.Offset,
+		Limit:  lim,
+		Offset: off,
 	}, nil
 }
 
-func deref(s *string) string {
-	if s == nil {
-		return ""
+// Search across files and folders, with optional scoping to a parent folder.
+func (r *queryResolver) SearchItems(
+	ctx context.Context,
+	q *string,
+	folderID *string,
+	limit *int,
+	offset *int,
+	sort *string,
+) (*model.CombinedSearchResponse, error) {
+	userID := auth.GetUserIDFromCtx(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("unauthenticated")
 	}
-	return *s
-}
 
-func defaultStr(s *string, def string) string {
-	if s == nil || *s == "" {
-		return def
+	lim := defaultInt(limit, 50)
+	if lim > 200 {
+		lim = 200
 	}
-	return *s
-}
-
-func defaultInt(n *int, def int) int {
-	if n == nil {
-		return def
+	off := defaultInt(offset, 0)
+	if off < 0 {
+		off = 0
 	}
-	return *n
+	sortVal := defaultStr(sort, "created_at_desc")
+	qVal := deref(q)
+	folder := deref(folderID)
+	// For dashboard root search we want nested items too, so do not enforce rootOnly
+	rootOnly := false
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	// Files
+	fp := search.Params{
+		UserID:        userID,
+		Q:             qVal,
+		FolderID:      folder,
+		Sort:          sortVal,
+		Limit:         lim,
+		Offset:        off,
+		IncludeRank:   qVal != "",
+		IncludeShared: true,
+	}
+	fQuery, fCountQuery, fArgs := search.BuildQueryScoped(fp, rootOnly)
+
+	// Folders
+	dqp := search.FolderParams{
+		UserID:   userID,
+		Q:        qVal,
+		ParentID: folder, // empty => root
+		Limit:    lim,
+		Offset:   off,
+		Sort:     sortVal,
+		AnyDepth: folder == "",
+	}
+	dQuery, dCountQuery, dArgs := search.BuildFolderQuery(dqp)
+
+	// Execute queries
+	files := []*model.FileSearchResult{}
+	var totalFiles int64
+	if rows, err := r.DB.QueryContext(ctx, fQuery, fArgs...); err == nil {
+		for rows.Next() {
+			var (
+				id, filename, mimeStr, contentHash string
+				size, physicalSize, refCount       int64
+				downloadCount                      int64
+				createdAt, updatedAt               time.Time
+				rank                               *float64
+			)
+			if scanErr := rows.Scan(
+				&id, &filename, &mimeStr, &size,
+				&createdAt, &updatedAt, &downloadCount,
+				&contentHash, &physicalSize, &refCount, &rank,
+			); scanErr == nil {
+				f := &model.FileSearchResult{
+					ID:            id,
+					Filename:      filename,
+					Mime:          mimeStr,
+					Size:          int(size),
+					CreatedAt:     createdAt.Format(time.RFC3339),
+					UpdatedAt:     updatedAt.Format(time.RFC3339),
+					DownloadCount: int(downloadCount),
+					ContentHash:   contentHash,
+					PhysicalSize:  int(physicalSize),
+					RefCount:      int(refCount),
+					DedupSavings:  int(size - physicalSize),
+				}
+				if rank != nil {
+					f.Rank = rank
+				}
+				files = append(files, f)
+			}
+		}
+		rows.Close()
+		_ = r.DB.QueryRowContext(ctx, fCountQuery, fArgs...).Scan(&totalFiles)
+	} else {
+		logger.L.Error("files search failed", zap.Error(err))
+		return nil, err
+	}
+
+	folders := []*model.FolderSearchResult{}
+	var totalFolders int64
+	if rows, err := r.DB.QueryContext(ctx, dQuery, dArgs...); err == nil {
+		for rows.Next() {
+			var (
+				id, name             string
+				size                 int64
+				createdAt, updatedAt time.Time
+				rank                 *float64
+			)
+			if scanErr := rows.Scan(&id, &name, &size, &createdAt, &updatedAt, &rank); scanErr == nil {
+				f := &model.FolderSearchResult{
+					ID:        id,
+					Name:      name,
+					Size:      int(size),
+					CreatedAt: createdAt.Format(time.RFC3339),
+					UpdatedAt: updatedAt.Format(time.RFC3339),
+				}
+				if rank != nil {
+					f.Rank = rank
+				}
+				folders = append(folders, f)
+			}
+		}
+		rows.Close()
+		_ = r.DB.QueryRowContext(ctx, dCountQuery, dArgs...).Scan(&totalFolders)
+	} else {
+		logger.L.Error("folders search failed", zap.Error(err))
+		return nil, err
+	}
+
+	return &model.CombinedSearchResponse{
+		Files:        files,
+		Folders:      folders,
+		TotalFiles:   int(totalFiles),
+		TotalFolders: int(totalFolders),
+		Limit:        lim,
+		Offset:       off,
+	}, nil
 }
-
-// Query returns generated.QueryResolver implementation.
-func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
-
-type queryResolver struct{ *Resolver }

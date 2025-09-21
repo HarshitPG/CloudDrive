@@ -45,6 +45,15 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	CombinedSearchResponse struct {
+		Files        func(childComplexity int) int
+		Folders      func(childComplexity int) int
+		Limit        func(childComplexity int) int
+		Offset       func(childComplexity int) int
+		TotalFiles   func(childComplexity int) int
+		TotalFolders func(childComplexity int) int
+	}
+
 	FileSearchResponse struct {
 		Items  func(childComplexity int) int
 		Limit  func(childComplexity int) int
@@ -67,13 +76,24 @@ type ComplexityRoot struct {
 		UpdatedAt     func(childComplexity int) int
 	}
 
+	FolderSearchResult struct {
+		CreatedAt func(childComplexity int) int
+		ID        func(childComplexity int) int
+		Name      func(childComplexity int) int
+		Rank      func(childComplexity int) int
+		Size      func(childComplexity int) int
+		UpdatedAt func(childComplexity int) int
+	}
+
 	Query struct {
 		SearchFiles func(childComplexity int, q *string, mime *string, minSize *int, maxSize *int, dateFrom *string, dateTo *string, tags []string, uploader *string, folderID *string, limit *int, offset *int, sort *string) int
+		SearchItems func(childComplexity int, q *string, folderID *string, limit *int, offset *int, sort *string) int
 	}
 }
 
 type QueryResolver interface {
 	SearchFiles(ctx context.Context, q *string, mime *string, minSize *int, maxSize *int, dateFrom *string, dateTo *string, tags []string, uploader *string, folderID *string, limit *int, offset *int, sort *string) (*model.FileSearchResponse, error)
+	SearchItems(ctx context.Context, q *string, folderID *string, limit *int, offset *int, sort *string) (*model.CombinedSearchResponse, error)
 }
 
 type executableSchema struct {
@@ -94,6 +114,43 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	ec := executionContext{nil, e, 0, 0, nil}
 	_ = ec
 	switch typeName + "." + field {
+
+	case "CombinedSearchResponse.files":
+		if e.complexity.CombinedSearchResponse.Files == nil {
+			break
+		}
+
+		return e.complexity.CombinedSearchResponse.Files(childComplexity), true
+	case "CombinedSearchResponse.folders":
+		if e.complexity.CombinedSearchResponse.Folders == nil {
+			break
+		}
+
+		return e.complexity.CombinedSearchResponse.Folders(childComplexity), true
+	case "CombinedSearchResponse.limit":
+		if e.complexity.CombinedSearchResponse.Limit == nil {
+			break
+		}
+
+		return e.complexity.CombinedSearchResponse.Limit(childComplexity), true
+	case "CombinedSearchResponse.offset":
+		if e.complexity.CombinedSearchResponse.Offset == nil {
+			break
+		}
+
+		return e.complexity.CombinedSearchResponse.Offset(childComplexity), true
+	case "CombinedSearchResponse.totalFiles":
+		if e.complexity.CombinedSearchResponse.TotalFiles == nil {
+			break
+		}
+
+		return e.complexity.CombinedSearchResponse.TotalFiles(childComplexity), true
+	case "CombinedSearchResponse.totalFolders":
+		if e.complexity.CombinedSearchResponse.TotalFolders == nil {
+			break
+		}
+
+		return e.complexity.CombinedSearchResponse.TotalFolders(childComplexity), true
 
 	case "FileSearchResponse.items":
 		if e.complexity.FileSearchResponse.Items == nil {
@@ -193,6 +250,43 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.FileSearchResult.UpdatedAt(childComplexity), true
 
+	case "FolderSearchResult.createdAt":
+		if e.complexity.FolderSearchResult.CreatedAt == nil {
+			break
+		}
+
+		return e.complexity.FolderSearchResult.CreatedAt(childComplexity), true
+	case "FolderSearchResult.id":
+		if e.complexity.FolderSearchResult.ID == nil {
+			break
+		}
+
+		return e.complexity.FolderSearchResult.ID(childComplexity), true
+	case "FolderSearchResult.name":
+		if e.complexity.FolderSearchResult.Name == nil {
+			break
+		}
+
+		return e.complexity.FolderSearchResult.Name(childComplexity), true
+	case "FolderSearchResult.rank":
+		if e.complexity.FolderSearchResult.Rank == nil {
+			break
+		}
+
+		return e.complexity.FolderSearchResult.Rank(childComplexity), true
+	case "FolderSearchResult.size":
+		if e.complexity.FolderSearchResult.Size == nil {
+			break
+		}
+
+		return e.complexity.FolderSearchResult.Size(childComplexity), true
+	case "FolderSearchResult.updatedAt":
+		if e.complexity.FolderSearchResult.UpdatedAt == nil {
+			break
+		}
+
+		return e.complexity.FolderSearchResult.UpdatedAt(childComplexity), true
+
 	case "Query.searchFiles":
 		if e.complexity.Query.SearchFiles == nil {
 			break
@@ -204,6 +298,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.SearchFiles(childComplexity, args["q"].(*string), args["mime"].(*string), args["minSize"].(*int), args["maxSize"].(*int), args["dateFrom"].(*string), args["dateTo"].(*string), args["tags"].([]string), args["uploader"].(*string), args["folderId"].(*string), args["limit"].(*int), args["offset"].(*int), args["sort"].(*string)), true
+	case "Query.searchItems":
+		if e.complexity.Query.SearchItems == nil {
+			break
+		}
+
+		args, err := ec.field_Query_searchItems_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.SearchItems(childComplexity, args["q"].(*string), args["folderId"].(*string), args["limit"].(*int), args["offset"].(*int), args["sort"].(*string)), true
 
 	}
 	return 0, false
@@ -318,6 +423,30 @@ type FileSearchResponse {
   offset: Int!
 }
 
+"""
+Folder result for folder search queries.
+"""
+type FolderSearchResult {
+  id: ID!
+  name: String!
+  size: Int!
+  createdAt: String!
+  updatedAt: String!
+  rank: Float
+}
+
+"""
+Combined response for file and folder search.
+"""
+type CombinedSearchResponse {
+  files: [FileSearchResult!]!
+  folders: [FolderSearchResult!]!
+  totalFiles: Int!
+  totalFolders: Int!
+  limit: Int!
+  offset: Int!
+}
+
 type Query {
   searchFiles(
     q: String
@@ -333,6 +462,18 @@ type Query {
     offset: Int
     sort: String
   ): FileSearchResponse!
+
+  """
+  Search files and folders. If folderId is provided, search only within that parent folder.
+  If folderId is omitted, search only within the root directory (top level) for both files and folders.
+  """
+  searchItems(
+    q: String
+    folderId: ID
+    limit: Int
+    offset: Int
+    sort: String
+  ): CombinedSearchResponse!
 }
 `, BuiltIn: false},
 }
@@ -419,6 +560,37 @@ func (ec *executionContext) field_Query_searchFiles_args(ctx context.Context, ra
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_searchItems_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "q", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["q"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "folderId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["folderId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "offset", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "sort", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["sort"] = arg4
+	return args, nil
+}
+
 func (ec *executionContext) field___Directive_args_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -470,6 +642,208 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _CombinedSearchResponse_files(ctx context.Context, field graphql.CollectedField, obj *model.CombinedSearchResponse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CombinedSearchResponse_files,
+		func(ctx context.Context) (any, error) { return obj.Files, nil },
+		nil,
+		ec.marshalNFileSearchResult2ᚕᚖbackendᚋinternalᚋapiᚋgraphqlᚋmodelᚐFileSearchResultᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CombinedSearchResponse_files(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CombinedSearchResponse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FileSearchResult_id(ctx, field)
+			case "filename":
+				return ec.fieldContext_FileSearchResult_filename(ctx, field)
+			case "mime":
+				return ec.fieldContext_FileSearchResult_mime(ctx, field)
+			case "size":
+				return ec.fieldContext_FileSearchResult_size(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FileSearchResult_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_FileSearchResult_updatedAt(ctx, field)
+			case "downloadCount":
+				return ec.fieldContext_FileSearchResult_downloadCount(ctx, field)
+			case "contentHash":
+				return ec.fieldContext_FileSearchResult_contentHash(ctx, field)
+			case "physicalSize":
+				return ec.fieldContext_FileSearchResult_physicalSize(ctx, field)
+			case "refCount":
+				return ec.fieldContext_FileSearchResult_refCount(ctx, field)
+			case "dedupSavings":
+				return ec.fieldContext_FileSearchResult_dedupSavings(ctx, field)
+			case "rank":
+				return ec.fieldContext_FileSearchResult_rank(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FileSearchResult", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CombinedSearchResponse_folders(ctx context.Context, field graphql.CollectedField, obj *model.CombinedSearchResponse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CombinedSearchResponse_folders,
+		func(ctx context.Context) (any, error) { return obj.Folders, nil },
+		nil,
+		ec.marshalNFolderSearchResult2ᚕᚖbackendᚋinternalᚋapiᚋgraphqlᚋmodelᚐFolderSearchResultᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CombinedSearchResponse_folders(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CombinedSearchResponse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FolderSearchResult_id(ctx, field)
+			case "name":
+				return ec.fieldContext_FolderSearchResult_name(ctx, field)
+			case "size":
+				return ec.fieldContext_FolderSearchResult_size(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FolderSearchResult_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_FolderSearchResult_updatedAt(ctx, field)
+			case "rank":
+				return ec.fieldContext_FolderSearchResult_rank(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FolderSearchResult", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CombinedSearchResponse_totalFiles(ctx context.Context, field graphql.CollectedField, obj *model.CombinedSearchResponse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CombinedSearchResponse_totalFiles,
+		func(ctx context.Context) (any, error) { return obj.TotalFiles, nil },
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CombinedSearchResponse_totalFiles(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CombinedSearchResponse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CombinedSearchResponse_totalFolders(ctx context.Context, field graphql.CollectedField, obj *model.CombinedSearchResponse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CombinedSearchResponse_totalFolders,
+		func(ctx context.Context) (any, error) { return obj.TotalFolders, nil },
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CombinedSearchResponse_totalFolders(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CombinedSearchResponse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CombinedSearchResponse_limit(ctx context.Context, field graphql.CollectedField, obj *model.CombinedSearchResponse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CombinedSearchResponse_limit,
+		func(ctx context.Context) (any, error) { return obj.Limit, nil },
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CombinedSearchResponse_limit(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CombinedSearchResponse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CombinedSearchResponse_offset(ctx context.Context, field graphql.CollectedField, obj *model.CombinedSearchResponse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CombinedSearchResponse_offset,
+		func(ctx context.Context) (any, error) { return obj.Offset, nil },
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CombinedSearchResponse_offset(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CombinedSearchResponse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
 
 func (ec *executionContext) _FileSearchResponse_items(ctx context.Context, field graphql.CollectedField, obj *model.FileSearchResponse) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
@@ -929,6 +1303,168 @@ func (ec *executionContext) fieldContext_FileSearchResult_rank(_ context.Context
 	return fc, nil
 }
 
+func (ec *executionContext) _FolderSearchResult_id(ctx context.Context, field graphql.CollectedField, obj *model.FolderSearchResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FolderSearchResult_id,
+		func(ctx context.Context) (any, error) { return obj.ID, nil },
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FolderSearchResult_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FolderSearchResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FolderSearchResult_name(ctx context.Context, field graphql.CollectedField, obj *model.FolderSearchResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FolderSearchResult_name,
+		func(ctx context.Context) (any, error) { return obj.Name, nil },
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FolderSearchResult_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FolderSearchResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FolderSearchResult_size(ctx context.Context, field graphql.CollectedField, obj *model.FolderSearchResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FolderSearchResult_size,
+		func(ctx context.Context) (any, error) { return obj.Size, nil },
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FolderSearchResult_size(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FolderSearchResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FolderSearchResult_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.FolderSearchResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FolderSearchResult_createdAt,
+		func(ctx context.Context) (any, error) { return obj.CreatedAt, nil },
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FolderSearchResult_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FolderSearchResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FolderSearchResult_updatedAt(ctx context.Context, field graphql.CollectedField, obj *model.FolderSearchResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FolderSearchResult_updatedAt,
+		func(ctx context.Context) (any, error) { return obj.UpdatedAt, nil },
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FolderSearchResult_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FolderSearchResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FolderSearchResult_rank(ctx context.Context, field graphql.CollectedField, obj *model.FolderSearchResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FolderSearchResult_rank,
+		func(ctx context.Context) (any, error) { return obj.Rank, nil },
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FolderSearchResult_rank(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FolderSearchResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_searchFiles(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -974,6 +1510,61 @@ func (ec *executionContext) fieldContext_Query_searchFiles(ctx context.Context, 
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_searchFiles_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_searchItems(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_searchItems,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().SearchItems(ctx, fc.Args["q"].(*string), fc.Args["folderId"].(*string), fc.Args["limit"].(*int), fc.Args["offset"].(*int), fc.Args["sort"].(*string))
+		},
+		nil,
+		ec.marshalNCombinedSearchResponse2ᚖbackendᚋinternalᚋapiᚋgraphqlᚋmodelᚐCombinedSearchResponse,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_searchItems(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "files":
+				return ec.fieldContext_CombinedSearchResponse_files(ctx, field)
+			case "folders":
+				return ec.fieldContext_CombinedSearchResponse_folders(ctx, field)
+			case "totalFiles":
+				return ec.fieldContext_CombinedSearchResponse_totalFiles(ctx, field)
+			case "totalFolders":
+				return ec.fieldContext_CombinedSearchResponse_totalFolders(ctx, field)
+			case "limit":
+				return ec.fieldContext_CombinedSearchResponse_limit(ctx, field)
+			case "offset":
+				return ec.fieldContext_CombinedSearchResponse_offset(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CombinedSearchResponse", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_searchItems_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -2520,6 +3111,70 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** object.gotpl ****************************
 
+var combinedSearchResponseImplementors = []string{"CombinedSearchResponse"}
+
+func (ec *executionContext) _CombinedSearchResponse(ctx context.Context, sel ast.SelectionSet, obj *model.CombinedSearchResponse) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, combinedSearchResponseImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CombinedSearchResponse")
+		case "files":
+			out.Values[i] = ec._CombinedSearchResponse_files(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "folders":
+			out.Values[i] = ec._CombinedSearchResponse_folders(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalFiles":
+			out.Values[i] = ec._CombinedSearchResponse_totalFiles(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalFolders":
+			out.Values[i] = ec._CombinedSearchResponse_totalFolders(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "limit":
+			out.Values[i] = ec._CombinedSearchResponse_limit(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "offset":
+			out.Values[i] = ec._CombinedSearchResponse_offset(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var fileSearchResponseImplementors = []string{"FileSearchResponse"}
 
 func (ec *executionContext) _FileSearchResponse(ctx context.Context, sel ast.SelectionSet, obj *model.FileSearchResponse) graphql.Marshaler {
@@ -2665,6 +3320,67 @@ func (ec *executionContext) _FileSearchResult(ctx context.Context, sel ast.Selec
 	return out
 }
 
+var folderSearchResultImplementors = []string{"FolderSearchResult"}
+
+func (ec *executionContext) _FolderSearchResult(ctx context.Context, sel ast.SelectionSet, obj *model.FolderSearchResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, folderSearchResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("FolderSearchResult")
+		case "id":
+			out.Values[i] = ec._FolderSearchResult_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._FolderSearchResult_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "size":
+			out.Values[i] = ec._FolderSearchResult_size(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._FolderSearchResult_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatedAt":
+			out.Values[i] = ec._FolderSearchResult_updatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "rank":
+			out.Values[i] = ec._FolderSearchResult_rank(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var queryImplementors = []string{"Query"}
 
 func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -2694,6 +3410,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_searchFiles(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "searchItems":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_searchItems(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -3088,6 +3826,20 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
+func (ec *executionContext) marshalNCombinedSearchResponse2backendᚋinternalᚋapiᚋgraphqlᚋmodelᚐCombinedSearchResponse(ctx context.Context, sel ast.SelectionSet, v model.CombinedSearchResponse) graphql.Marshaler {
+	return ec._CombinedSearchResponse(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNCombinedSearchResponse2ᚖbackendᚋinternalᚋapiᚋgraphqlᚋmodelᚐCombinedSearchResponse(ctx context.Context, sel ast.SelectionSet, v *model.CombinedSearchResponse) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CombinedSearchResponse(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNFileSearchResponse2backendᚋinternalᚋapiᚋgraphqlᚋmodelᚐFileSearchResponse(ctx context.Context, sel ast.SelectionSet, v model.FileSearchResponse) graphql.Marshaler {
 	return ec._FileSearchResponse(ctx, sel, &v)
 }
@@ -3154,6 +3906,60 @@ func (ec *executionContext) marshalNFileSearchResult2ᚖbackendᚋinternalᚋapi
 		return graphql.Null
 	}
 	return ec._FileSearchResult(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNFolderSearchResult2ᚕᚖbackendᚋinternalᚋapiᚋgraphqlᚋmodelᚐFolderSearchResultᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.FolderSearchResult) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNFolderSearchResult2ᚖbackendᚋinternalᚋapiᚋgraphqlᚋmodelᚐFolderSearchResult(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNFolderSearchResult2ᚖbackendᚋinternalᚋapiᚋgraphqlᚋmodelᚐFolderSearchResult(ctx context.Context, sel ast.SelectionSet, v *model.FolderSearchResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._FolderSearchResult(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNID2string(ctx context.Context, v any) (string, error) {

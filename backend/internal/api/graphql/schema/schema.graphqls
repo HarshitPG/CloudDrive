@@ -22,6 +22,24 @@ type FileSearchResponse {
   offset: Int!
 }
 
+type FolderSearchResult {
+  id: ID!
+  name: String!
+  size: Int!
+  createdAt: String!
+  updatedAt: String!
+  rank: Float
+}
+
+type CombinedSearchResponse {
+  files: [FileSearchResult!]!
+  folders: [FolderSearchResult!]!
+  totalFiles: Int!
+  totalFolders: Int!
+  limit: Int!
+  offset: Int!
+}
+
 type Query {
   searchFiles(
     q: String
@@ -37,4 +55,14 @@ type Query {
     offset: Int
     sort: String
   ): FileSearchResponse!
+
+  # Search both files and folders. If folderId is provided, search only inside that folder.
+  # If folderId is not provided, search in the root directory (top level) for both files and folders.
+  searchItems(
+    q: String
+    folderId: ID
+    limit: Int
+    offset: Int
+    sort: String
+  ): CombinedSearchResponse!
 }

@@ -2,6 +2,16 @@
 
 package model
 
+// Combined response for file and folder search.
+type CombinedSearchResponse struct {
+	Files        []*FileSearchResult   `json:"files"`
+	Folders      []*FolderSearchResult `json:"folders"`
+	TotalFiles   int                   `json:"totalFiles"`
+	TotalFolders int                   `json:"totalFolders"`
+	Limit        int                   `json:"limit"`
+	Offset       int                   `json:"offset"`
+}
+
 type FileSearchResponse struct {
 	Items  []*FileSearchResult `json:"items"`
 	Total  int                 `json:"total"`
@@ -22,6 +32,16 @@ type FileSearchResult struct {
 	RefCount      int      `json:"refCount"`
 	DedupSavings  int      `json:"dedupSavings"`
 	Rank          *float64 `json:"rank,omitempty"`
+}
+
+// Folder result for folder search queries.
+type FolderSearchResult struct {
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Size      int      `json:"size"`
+	CreatedAt string   `json:"createdAt"`
+	UpdatedAt string   `json:"updatedAt"`
+	Rank      *float64 `json:"rank,omitempty"`
 }
 
 type Query struct {
