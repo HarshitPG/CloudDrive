@@ -45,9 +45,11 @@ import type { FolderItem } from "../../api/folders";
 import { listFiles } from "../../api/files";
 import { listFolders, deleteFolder, getFolderFiles } from "../../api/folders";
 import {
-  searchFiles,
   type SearchFilters,
   type FileSearchResult,
+  searchItemsCombined,
+  type FolderSearchResult,
+  searchFiles,
 } from "../../api/search";
 import {
   fileOperationsApi,
@@ -143,28 +145,39 @@ export default function Home() {
     undefined
   );
   const isInFolder = !!folderId;
-  const isSearchDisabled = isInFolder;
+  // Search is enabled both at root and inside folders now.
+  const isSearchDisabled = false;
+  const isFiltersEnabled = !isInFolder;
 
-  const convertSearchResultToDriveItem = useCallback(
-    (result: FileSearchResult): DriveItem => {
-      return {
-        id: result.id,
-        name: result.filename,
-        filename: result.filename,
-        type: "file" as const,
-        mimeType: result.mime,
-        mime: result.mime,
-        size: result.size,
-        createdAt: result.createdAt,
-        updatedAt: result.updatedAt,
-        isShared: false,
-        isStarred: false,
-        isTrashed: false,
-        downloadCount: result.downloadCount,
-        tags: [],
-        version: 1,
-      };
-    },
+  const convertFileSearchToDriveItem = useCallback(
+    (result: FileSearchResult): DriveItem => ({
+      id: result.id,
+      name: result.filename,
+      filename: result.filename,
+      type: "file" as const,
+      mimeType: result.mime,
+      mime: result.mime,
+      size: result.size,
+      createdAt: result.createdAt,
+      updatedAt: result.updatedAt,
+      isShared: false,
+      isStarred: false,
+      isTrashed: false,
+      downloadCount: result.downloadCount,
+      tags: [],
+      version: 1,
+    }),
+    []
+  );
+
+  const convertFolderSearchToDriveItem = useCallback(
+    (folder: FolderSearchResult): DriveItem => ({
+      id: folder.id,
+      name: folder.name,
+      type: "folder" as const,
+      createdAt: folder.createdAt,
+      updatedAt: folder.updatedAt,
+    }),
     []
   );
 
@@ -243,15 +256,8 @@ export default function Home() {
     };
   }, [loadData]);
 
-  // Search effect
+  // Search effect: filters only at root use searchFiles (files-only), otherwise use combined searchItems
   useEffect(() => {
-    // Disable search when in folder view
-    if (isSearchDisabled) {
-      setFilteredItems(items);
-      setIsSearching(false);
-      return;
-    }
-
     // Build search filters including text query
     const filters: SearchFilters = {
       ...searchFilters,
@@ -270,14 +276,45 @@ export default function Home() {
 
     const timer = setTimeout(async () => {
       try {
-        const res = await searchFiles(filters);
-        if (!isMounted) return;
-
-        // Convert search results to DriveItems
-        const driveItems: DriveItem[] = res.items.map(
-          convertSearchResultToDriveItem
+        const hasActiveFilters = !!(
+          filters.mime ||
+          filters.minSize ||
+          filters.maxSize ||
+          filters.dateFrom ||
+          filters.dateTo ||
+          (filters.tags && filters.tags.length > 0) ||
+          filters.uploader ||
+          filters.folderId ||
+          (filters.sort && filters.sort !== "created_at_desc")
         );
-        setFilteredItems(driveItems);
+
+        if (isFiltersEnabled && hasActiveFilters) {
+          // Apply file filters at root using GraphQL searchFiles
+          const res = await searchFiles(filters);
+          if (!isMounted) return;
+          const driveItems: DriveItem[] = res.items.map(
+            convertFileSearchToDriveItem
+          );
+          setFilteredItems(driveItems);
+        } else {
+          // Combined search (files + folders). If inside a folder, pass folderId to scope to parent
+          const res = await searchItemsCombined({
+            q: filters.q,
+            folderId: folderId,
+            limit: filters.limit ?? 50,
+            offset: filters.offset ?? 0,
+            sort: filters.sort ?? "created_at_desc",
+          });
+          if (!isMounted) return;
+          const fileItems: DriveItem[] = res.files.map(
+            convertFileSearchToDriveItem
+          );
+          const folderItems: DriveItem[] = res.folders.map(
+            convertFolderSearchToDriveItem
+          );
+          const driveItems: DriveItem[] = [...folderItems, ...fileItems];
+          setFilteredItems(driveItems);
+        }
         setIsSearching(false);
       } catch (error) {
         console.error("Search failed:", error);
@@ -296,16 +333,18 @@ export default function Home() {
     searchQuery,
     searchFilters,
     items,
-    convertSearchResultToDriveItem,
-    isSearchDisabled,
+    convertFileSearchToDriveItem,
+    convertFolderSearchToDriveItem,
+    folderId,
+    isFiltersEnabled,
   ]);
 
   // Update filtered items when items change
   useEffect(() => {
-    if (!searchQuery.trim() || isSearchDisabled) {
+    if (!searchQuery.trim()) {
       setFilteredItems(items);
     }
-  }, [items, searchQuery, isSearchDisabled]);
+  }, [items, searchQuery]);
 
   useEffect(() => {
     if (toastMessage) {
@@ -785,7 +824,7 @@ export default function Home() {
             parentFolderId={folderId}
             onFolderCreated={handleFolderCreated}
           />
-          {!isSearchDisabled && (
+          {isFiltersEnabled && (
             <FilterModal
               filters={{ ...searchFilters, q: searchQuery }}
               onFiltersChange={handleFiltersChange}

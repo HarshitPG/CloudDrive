@@ -22,6 +22,24 @@ export type FileSearchResponse = {
   offset: number;
 };
 
+export type FolderSearchResult = {
+  id: string;
+  name: string;
+  size: number;
+  createdAt: string;
+  updatedAt: string;
+  rank?: number;
+};
+
+export type CombinedSearchResponse = {
+  files: FileSearchResult[];
+  folders: FolderSearchResult[];
+  totalFiles: number;
+  totalFolders: number;
+  limit: number;
+  offset: number;
+};
+
 export type SearchFilters = {
   q?: string;
   mime?: string;
@@ -126,6 +144,65 @@ export async function searchFiles(
   }
 
   return res.data.data.searchFiles as FileSearchResponse;
+}
+
+// Combined files + folders search via GraphQL searchItems
+export async function searchItemsCombined(
+  filters: {
+    q?: string;
+    folderId?: string;
+    limit?: number;
+    offset?: number;
+    sort?: string;
+  } = {}
+): Promise<CombinedSearchResponse> {
+  const {
+    q,
+    folderId,
+    limit = 50,
+    offset = 0,
+    sort = "created_at_desc",
+  } = filters;
+
+  const body = {
+    query: `query SearchItems($q: String, $folderId: ID, $limit: Int, $offset: Int, $sort: String) {
+      searchItems(q: $q, folderId: $folderId, limit: $limit, offset: $offset, sort: $sort) {
+        files {
+          id
+          filename
+          mime
+          size
+          createdAt
+          updatedAt
+          downloadCount
+          contentHash
+          physicalSize
+          refCount
+          dedupSavings
+          rank
+        }
+        folders {
+          id
+          name
+          size
+          createdAt
+          updatedAt
+          rank
+        }
+        totalFiles
+        totalFolders
+        limit
+        offset
+      }
+    }`,
+    variables: { q, folderId, limit, offset, sort },
+  };
+
+  const res = await axios.post("/api/v1/graphql", body);
+  if (res.data.errors) {
+    throw new Error(res.data.errors[0]?.message || "GraphQL query failed");
+  }
+  return res.data.data.searchItems as CombinedSearchResponse;
 }
 
 export async function searchFilesLegacy(
