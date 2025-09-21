@@ -6,6 +6,11 @@ import {
   restoreFile,
   deleteFilePermanent,
 } from "../../api/files";
+import {
+  listDeletedFolders,
+  deleteFolderPermanent,
+  FolderItem,
+} from "../../api/folders";
 import { Button } from "../../components/ui/button";
 import {
   Dialog,
@@ -24,6 +29,18 @@ type DeletedFile = {
   size?: number;
   deletedAt?: string;
 };
+type DeletedFolder = {
+  id: string;
+  name: string;
+  deletedAt?: string;
+};
+
+type BackendFolderResponse = {
+  id: string;
+  name?: string;
+  deletedAt?: string;
+  deleted_at?: string;
+};
 type BackendDeletedFile = {
   id: string;
   filename?: string;
@@ -36,23 +53,32 @@ type BackendDeletedFile = {
 
 export default function TrashView() {
   const [files, setFiles] = useState<DeletedFile[]>([]);
+  const [folders, setFolders] = useState<DeletedFolder[]>([]);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchTrash = async () => {
     setLoading(true);
     try {
-      const data = (await listDeletedFiles()) as BackendDeletedFile[];
-      // backend returns array of files with fields including deletedAt
-      setFiles(
-        (data || []).map((f) => ({
-          id: String(f.id),
-          filename: String(f.filename ?? f.name ?? ""),
-          mime: f.mime,
-          size: f.size,
-          deletedAt: (f.deletedAt ?? f.deleted_at) as string | undefined,
-        }))
-      );
+      const [fileData, folderData] = await Promise.all([
+        listDeletedFiles(),
+        listDeletedFolders(),
+      ]);
+      const filesMapped = (fileData || []).map((f: BackendDeletedFile) => ({
+        id: String(f.id),
+        filename: String(f.filename ?? f.name ?? ""),
+        mime: f.mime,
+        size: f.size,
+        deletedAt: (f.deletedAt ?? f.deleted_at) as string | undefined,
+      }));
+      const foldersBackend = folderData as BackendFolderResponse[];
+      const foldersMapped = (foldersBackend || []).map((f) => ({
+        id: f.id,
+        name: f.name ?? "",
+        deletedAt: f.deletedAt ?? f.deleted_at ?? "",
+      }));
+      setFiles(filesMapped);
+      setFolders(foldersMapped);
     } catch (err) {
       console.error("failed load trash", err);
     } finally {
@@ -68,8 +94,16 @@ export default function TrashView() {
     // show confirmation modal handled outside this function
     setActionLoading(id);
     try {
-      await restoreFile(id);
-      setFiles((s) => s.filter((f) => f.id !== id));
+      // determine whether id is file or folder by checking local lists
+      const isFolder = folders.find((f) => f.id === id);
+      if (isFolder) {
+        // no folder restore endpoint implemented yet, call backend when available
+        // placeholder: treat as no-op and remove from UI
+        setFolders((s) => s.filter((ff) => ff.id !== id));
+      } else {
+        await restoreFile(id);
+        setFiles((s) => s.filter((f) => f.id !== id));
+      }
     } catch (err) {
       console.error("restore failed", err);
       // use dialog-based error or toast in future; fallback to alert
@@ -82,8 +116,14 @@ export default function TrashView() {
   const onDeletePermanent = async (id: string) => {
     setActionLoading(id);
     try {
-      await deleteFilePermanent(id);
-      setFiles((s) => s.filter((f) => f.id !== id));
+      const isFolder = folders.find((f) => f.id === id);
+      if (isFolder) {
+        await deleteFolderPermanent(id);
+        setFolders((s) => s.filter((f) => f.id !== id));
+      } else {
+        await deleteFilePermanent(id);
+        setFiles((s) => s.filter((f) => f.id !== id));
+      }
     } catch (err) {
       console.error("permanent delete failed", err);
       alert("Failed to delete file permanently. See console for details.");
@@ -143,7 +183,7 @@ export default function TrashView() {
 
       {loading ? (
         <div className="text-center py-12">Loading...</div>
-      ) : files.length === 0 ? (
+      ) : files.length + folders.length === 0 ? (
         <div className="text-center py-12">
           <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
             <Trash2 className="w-8 h-8 text-muted-foreground" />
@@ -169,8 +209,40 @@ export default function TrashView() {
                 </tr>
               </thead>
               <tbody>
+                {folders.map((ff) => (
+                  <tr key={`folder-${ff.id}`} className="border-t">
+                    <td className="px-3 py-2">
+                      <div className="font-medium">{ff.name}</div>
+                    </td>
+                    <td className="px-3 py-2">folder</td>
+                    <td className="px-3 py-2">-</td>
+                    <td className="px-3 py-2">{ff.deletedAt ?? "-"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => openConfirm("restore", ff.id, ff.name)}
+                          aria-label={`Restore ${ff.name}`}
+                          disabled={actionLoading !== null}
+                        >
+                          <RotateCw className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => openConfirm("delete", ff.id, ff.name)}
+                          aria-label={`Delete permanently ${ff.name}`}
+                          disabled={actionLoading !== null}
+                        >
+                          <Trash className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
                 {files.map((f) => (
-                  <tr key={f.id} className="border-t">
+                  <tr key={`file-${f.id}`} className="border-t">
                     <td className="px-3 py-2">
                       <div className="font-medium">{f.filename}</div>
                     </td>

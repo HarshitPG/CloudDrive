@@ -28,6 +28,7 @@ export default function App() {
         <Route path="home" element={<HomePage />} />
         <Route path="home/folder/:folderId" element={<HomePage />} />
         <Route path="shared" element={<SharedView />} />
+        <Route path="shared/folder/:folderId" element={<SharedView />} />
         <Route path="recent" element={<RecentView />} />
         <Route path="starred" element={<StarredView />} />
         <Route path="trash" element={<TrashView />} />

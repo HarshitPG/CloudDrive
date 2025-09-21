@@ -59,10 +59,9 @@ export default function ShareModal({
     snapshotMode: false,
   });
 
-  const [userShareData, setUserShareData] = useState<ShareToUserRequest>({
-    targetUserId: "",
-    permission: "read",
-  });
+  const [userShareData, setUserShareData] = useState<ShareToUserRequest>(
+    () => ({ targetUserEmail: "", permission: "read" })
+  );
 
   const handlePublicShare = async () => {
     setIsLoading(true);
@@ -97,8 +96,8 @@ export default function ShareModal({
   };
 
   const handleUserShare = async () => {
-    if (!userShareData.targetUserId.trim()) {
-      setError("Please enter a user ID");
+    if (!userShareData.targetUserEmail.trim()) {
+      setError("Please enter a user email");
       return;
     }
 
@@ -109,10 +108,10 @@ export default function ShareModal({
       if (item.type === "file") {
         await fileOperationsApi.shareFileWithUser(item.id, userShareData);
       } else {
-        throw new Error("User sharing for folders not implemented yet");
+        await folderOperationsApi.shareFolderWithUser(item.id, userShareData);
       }
 
-      setUserShareData({ targetUserId: "", permission: "read" });
+      setUserShareData({ targetUserEmail: "", permission: "read" });
       onShareSuccess?.("Shared successfully with user");
     } catch (err) {
       setError(
@@ -140,7 +139,7 @@ export default function ShareModal({
       description: "",
       expiresAt: undefined,
     });
-    setUserShareData({ targetUserId: "", permission: "read" });
+    setUserShareData({ targetUserEmail: "", permission: "read" });
     setGeneratedShareUrl(null);
     setError(null);
     setCopiedUrl(null);
@@ -377,20 +376,20 @@ export default function ShareModal({
               className="space-y-4"
             >
               <div className="space-y-2">
-                <Label htmlFor="target-user">User ID</Label>
+                <Label htmlFor="target-user">User Email</Label>
                 <Input
                   id="target-user"
-                  value={userShareData.targetUserId}
+                  value={userShareData.targetUserEmail}
                   onChange={(e) =>
                     setUserShareData({
                       ...userShareData,
-                      targetUserId: e.target.value,
+                      targetUserEmail: e.target.value,
                     })
                   }
-                  placeholder="Enter user ID to share with"
+                  placeholder="Enter user email to share with"
                 />
                 <p className="text-xs text-muted-foreground">
-                  The user ID of the person you want to share with
+                  The email address of the person you want to share with
                 </p>
               </div>
 
@@ -414,7 +413,7 @@ export default function ShareModal({
 
               <Button
                 onClick={handleUserShare}
-                disabled={isLoading || !userShareData.targetUserId.trim()}
+                disabled={isLoading || !userShareData.targetUserEmail.trim()}
                 className="w-full"
               >
                 {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

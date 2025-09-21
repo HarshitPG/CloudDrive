@@ -131,3 +131,36 @@ export async function getFolderTree(folderId: string): Promise<FolderTree> {
   const res = await axios.get(`/api/v1/folders/${folderId}/tree`);
   return res.data as FolderTree;
 }
+
+export async function getFolderAncestors(
+  folderId: string
+): Promise<{ id?: string; name: string }[]> {
+  const res = await axios.get(`/api/v1/folders/${folderId}/ancestors`);
+  return res.data.ancestors || [];
+}
+
+// List trashed folders (primary only) for the current user
+export async function listDeletedFolders(
+  page = 1,
+  limit = 50
+): Promise<FolderItem[]> {
+  const offset = (page - 1) * limit;
+  const params = new URLSearchParams({
+    deleted: "true",
+    limit: limit.toString(),
+    offset: offset.toString(),
+  });
+  const res = await axios.get<FolderListResponse>(`/api/v1/folders?${params}`);
+  return (res.data.folders || []).map((folder) => ({
+    ...folder,
+    type: "folder" as const,
+  }));
+}
+
+// Permanently delete a folder
+export async function deleteFolderPermanent(
+  id: string
+): Promise<{ message: string }> {
+  const res = await axios.delete(`/api/v1/folders/${id}?permanent=true`);
+  return res.data;
+}

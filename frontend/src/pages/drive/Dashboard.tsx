@@ -54,6 +54,8 @@ import { downloadUrlToFile } from "@/lib/utils";
 import { UploadList } from "@/components/upload/UploadList";
 import { uploadManager } from "@/lib/uploadManager";
 import FullscreenPreviewModal from "@/components/FullscreenPreviewModal";
+import Breadcrumbs, { type Crumb } from "@/components/ui/Breadcrumbs";
+import { getFolderAncestors } from "../../api/folders";
 import {
   Dialog,
   DialogContent,
@@ -123,9 +125,7 @@ export default function Home() {
   );
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [currentFolder, setCurrentFolder] = useState<FolderItem | null>(null);
-  const [breadcrumbs, setBreadcrumbs] = useState<
-    { id: string; name: string }[]
-  >([]);
+  const [breadcrumbs, setBreadcrumbs] = useState<Crumb[]>([]);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DriveItem | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -443,29 +443,31 @@ export default function Home() {
     }
   };
 
-  const Breadcrumb = () => {
-    if (!isInFolder) return null;
+  // Fetch ancestor chain for breadcrumb when viewing a folder
+  useEffect(() => {
+    let mounted = true;
+    async function loadAncestors() {
+      if (!folderId) {
+        setBreadcrumbs([]);
+        return;
+      }
 
-    return (
-      <div className="flex items-center gap-2 mb-4">
-        <button
-          onClick={() => handleBreadcrumbClick()}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <HomeIcon className="w-4 h-4" />
-          Home
-        </button>
-        {folderId && (
-          <>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium">
-              {currentFolder?.name || "Current Folder"}
-            </span>
-          </>
-        )}
-      </div>
-    );
-  };
+      try {
+        const ancestors = await getFolderAncestors(folderId);
+        if (!mounted) return;
+        // Prepend Home root
+        setBreadcrumbs([{ name: "Home" }, ...ancestors]);
+      } catch (err) {
+        console.error("Failed to load folder ancestors:", err);
+        if (mounted) setBreadcrumbs([{ name: "Home" }]);
+      }
+    }
+
+    loadAncestors();
+    return () => {
+      mounted = false;
+    };
+  }, [folderId]);
 
   const handleShareSuccess = (shareUrl: string) => {
     setToastMessage(
@@ -709,7 +711,9 @@ export default function Home() {
 
   return (
     <>
-      <Breadcrumb />
+      <div className="flex items-center gap-2 mb-4">
+        <Breadcrumbs crumbs={breadcrumbs} onClick={handleBreadcrumbClick} />
+      </div>
 
       <div className="flex items-center gap-4 p-4 bg-background border border-drive-border rounded-lg mb-6">
         <div className="flex-1 max-w-md">

@@ -12,7 +12,7 @@ export interface ShareResponse {
 }
 
 export interface ShareToUserRequest {
-  targetUserId: string;
+  targetUserEmail: string;
   permission?: string;
 }
 
@@ -309,6 +309,63 @@ export const folderOperationsApi = {
         }`
       );
     }
+  },
+
+  // Share a folder with a specific user (private share)
+  async shareFolderWithUser(
+    folderId: string,
+    shareData: ShareToUserRequest
+  ): Promise<{ shareId: string }> {
+    try {
+      const response = await axios.post(
+        `/api/v1/shares/folders/${folderId}/share/user`,
+        shareData
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(
+        `Failed to share folder with user: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  },
+};
+
+// Shared-with-me listing API
+export interface SharedWithMeResponse {
+  files: Array<{
+    id: string;
+    filename: string;
+    mime: string;
+    size: number;
+    createdAt: string;
+    updatedAt: string;
+    downloadCount: number;
+  }>;
+  folders: Array<{
+    id: string;
+    name: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  limit: number;
+  offset: number;
+}
+
+export const sharedApi = {
+  async listSharedWithMe(
+    limit = 50,
+    offset = 0
+  ): Promise<SharedWithMeResponse> {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    const response = await axios.get(
+      `/api/v1/shares/shared-with-me?${params.toString()}`
+    );
+    return response.data as SharedWithMeResponse;
   },
 };
 
