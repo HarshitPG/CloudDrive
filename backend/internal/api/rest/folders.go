@@ -78,7 +78,11 @@ func (h *folderHandler) list(c *gin.Context) {
 
 	if parentID == "" {
 		rows, err = h.db.QueryContext(c.Request.Context(), `
-			SELECT id, name, created_at, updated_at
+					SELECT id, name, created_at, updated_at,
+						COALESCE((SELECT SUM(fc.size_bytes)
+											FROM user_files uf
+											JOIN file_contents fc ON uf.content_id = fc.id
+											WHERE uf.folder_id = folders.id AND uf.deleted_at IS NULL), 0) AS size
 			FROM folders
 			WHERE user_id=$1 AND parent_id IS NULL AND deleted_at IS NULL
 			ORDER BY created_at DESC
@@ -86,7 +90,11 @@ func (h *folderHandler) list(c *gin.Context) {
 		`, userID, limit, offset)
 	} else {
 		rows, err = h.db.QueryContext(c.Request.Context(), `
-			SELECT id, name, created_at, updated_at
+					SELECT id, name, created_at, updated_at,
+						COALESCE((SELECT SUM(fc.size_bytes)
+											FROM user_files uf
+											JOIN file_contents fc ON uf.content_id = fc.id
+											WHERE uf.folder_id = f.id AND uf.deleted_at IS NULL), 0) AS size
 			FROM folders
 			WHERE user_id=$1 AND parent_id=$2 AND deleted_at IS NULL
 			ORDER BY created_at DESC
@@ -102,14 +110,20 @@ func (h *folderHandler) list(c *gin.Context) {
 	out := make([]map[string]interface{}, 0, limit)
 	for rows.Next() {
 		var id, name, createdAt, updatedAt string
-		if err := rows.Scan(&id, &name, &createdAt, &updatedAt); err != nil {
+		var size sql.NullInt64
+		if err := rows.Scan(&id, &name, &createdAt, &updatedAt, &size); err != nil {
 			continue
+		}
+		s := int64(0)
+		if size.Valid {
+			s = size.Int64
 		}
 		out = append(out, map[string]interface{}{
 			"id":        id,
 			"name":      name,
 			"createdAt": createdAt,
 			"updatedAt": updatedAt,
+			"size":      s,
 		})
 	}
 
@@ -161,7 +175,11 @@ func (h *folderHandler) listPrimary(c *gin.Context) {
 	if deleted {
 		// list trashed folders but only those whose parent is NULL or parent is not trashed
 		rows, err = h.db.QueryContext(c.Request.Context(), `
-			SELECT f.id, f.name, f.created_at, f.updated_at, f.deleted_at
+					SELECT f.id, f.name, f.created_at, f.updated_at, f.deleted_at,
+						COALESCE((SELECT SUM(fc.size_bytes)
+											FROM user_files uf
+											JOIN file_contents fc ON uf.content_id = fc.id
+											WHERE uf.folder_id = f.id AND uf.deleted_at IS NULL), 0) AS size
 			FROM folders f
 			LEFT JOIN folders p ON f.parent_id = p.id
 			WHERE f.user_id = $1 AND f.deleted_at IS NOT NULL
@@ -172,7 +190,11 @@ func (h *folderHandler) listPrimary(c *gin.Context) {
 	} else if parentID == "" {
 		// root primary folders
 		rows, err = h.db.QueryContext(c.Request.Context(), `
-			SELECT f.id, f.name, f.created_at, f.updated_at
+			SELECT f.id, f.name, f.created_at, f.updated_at,
+				COALESCE((SELECT SUM(fc.size_bytes)
+						  FROM user_files uf
+						  JOIN file_contents fc ON uf.content_id = fc.id
+						  WHERE uf.folder_id = f.id AND uf.deleted_at IS NULL), 0) AS size
 			FROM folders f
 			WHERE f.user_id = $1 AND f.parent_id IS NULL AND f.deleted_at IS NULL
 			ORDER BY f.created_at DESC
@@ -181,7 +203,11 @@ func (h *folderHandler) listPrimary(c *gin.Context) {
 	} else {
 		// list children of a parent only if parent is not trashed
 		rows, err = h.db.QueryContext(c.Request.Context(), `
-			SELECT f.id, f.name, f.created_at, f.updated_at
+			SELECT f.id, f.name, f.created_at, f.updated_at,
+				COALESCE((SELECT SUM(fc.size_bytes)
+						  FROM user_files uf
+						  JOIN file_contents fc ON uf.content_id = fc.id
+						  WHERE uf.folder_id = f.id AND uf.deleted_at IS NULL), 0) AS size
 			FROM folders f
 			JOIN folders p ON f.parent_id = p.id
 			WHERE f.user_id = $1 AND f.parent_id = $2 AND f.deleted_at IS NULL AND p.deleted_at IS NULL
@@ -201,24 +227,46 @@ func (h *folderHandler) listPrimary(c *gin.Context) {
 		var id, name, createdAt, updatedAt string
 		var deletedAt sql.NullTime
 		if deleted {
-			if err := rows.Scan(&id, &name, &createdAt, &updatedAt, &deletedAt); err != nil {
+			var size sql.NullInt64
+			if err := rows.Scan(&id, &name, &createdAt, &updatedAt, &deletedAt, &size); err != nil {
 				continue
 			}
+			s := int64(0)
+			if size.Valid {
+				s = size.Int64
+			}
+			item := map[string]interface{}{
+				"id":        id,
+				"name":      name,
+				"createdAt": createdAt,
+				"updatedAt": updatedAt,
+				"size":      s,
+			}
+			if deletedAt.Valid {
+				item["deletedAt"] = deletedAt.Time
+			}
+			out = append(out, item)
+			continue
 		} else {
-			if err := rows.Scan(&id, &name, &createdAt, &updatedAt); err != nil {
+			var size sql.NullInt64
+			if err := rows.Scan(&id, &name, &createdAt, &updatedAt, &size); err != nil {
 				continue
 			}
+			s := int64(0)
+			if size.Valid {
+				s = size.Int64
+			}
+			item := map[string]interface{}{
+				"id":        id,
+				"name":      name,
+				"createdAt": createdAt,
+				"updatedAt": updatedAt,
+				"size":      s,
+			}
+			out = append(out, item)
+			continue
 		}
-		item := map[string]interface{}{
-			"id":        id,
-			"name":      name,
-			"createdAt": createdAt,
-			"updatedAt": updatedAt,
-		}
-		if deleted && deletedAt.Valid {
-			item["deletedAt"] = deletedAt.Time
-		}
-		out = append(out, item)
+        
 	}
 
 	c.JSON(http.StatusOK, gin.H{

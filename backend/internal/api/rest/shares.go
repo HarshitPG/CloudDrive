@@ -738,8 +738,9 @@ func (h *shareHandler) listSharedWithMe(c *gin.Context) {
 	filesRows, err := h.db.QueryContext(c.Request.Context(), `
 		SELECT DISTINCT ON (uf.id)
 			   uf.id, uf.filename, uf.declared_mime, uf.original_size_bytes,
-			   uf.created_at, uf.updated_at, uf.download_count
+			   uf.created_at, uf.updated_at, uf.download_count, u.email
 		FROM user_files uf
+		JOIN users u ON u.id = uf.user_id
 		JOIN shares s ON s.target_type='file' AND s.target_id = uf.id AND s.revoked = false
 		JOIN share_users su ON su.share_id = s.id
 		WHERE su.target_user_id = $1 AND uf.deleted_at IS NULL
@@ -756,12 +757,12 @@ func (h *shareHandler) listSharedWithMe(c *gin.Context) {
 	sharedFiles := make([]map[string]interface{}, 0)
 	for filesRows.Next() {
 		var (
-			id, filename, mime   string
+			id, filename, mime, ownerEmail string
 			size                 int64
 			createdAt, updatedAt time.Time
 			downloadCount        int64
 		)
-		if err := filesRows.Scan(&id, &filename, &mime, &size, &createdAt, &updatedAt, &downloadCount); err == nil {
+		if err := filesRows.Scan(&id, &filename, &mime, &size, &createdAt, &updatedAt, &downloadCount, &ownerEmail); err == nil {
 			sharedFiles = append(sharedFiles, map[string]interface{}{
 				"id":            id,
 				"filename":      filename,
@@ -770,6 +771,7 @@ func (h *shareHandler) listSharedWithMe(c *gin.Context) {
 				"createdAt":     createdAt,
 				"updatedAt":     updatedAt,
 				"downloadCount": downloadCount,
+				"ownerEmail":    ownerEmail,
 			})
 		}
 	}
@@ -777,8 +779,15 @@ func (h *shareHandler) listSharedWithMe(c *gin.Context) {
 	// Folders shared with the user
 	folderRows, err := h.db.QueryContext(c.Request.Context(), `
 		SELECT DISTINCT ON (f.id)
-			   f.id, f.name, f.created_at, f.updated_at
+			   f.id, f.name, f.created_at, f.updated_at, u.email,
+			   COALESCE((
+				   SELECT SUM(fc.size_bytes)
+				   FROM user_files uf2
+				   JOIN file_contents fc ON uf2.content_id = fc.id
+				   WHERE uf2.folder_id = f.id AND uf2.deleted_at IS NULL
+			   ), 0) as size
 		FROM folders f
+		JOIN users u ON u.id = f.user_id
 		JOIN shares s ON s.target_type='folder' AND s.target_id = f.id AND s.revoked = false
 		JOIN share_users su ON su.share_id = s.id
 		WHERE su.target_user_id = $1 AND f.deleted_at IS NULL
@@ -795,15 +804,18 @@ func (h *shareHandler) listSharedWithMe(c *gin.Context) {
 	sharedFolders := make([]map[string]interface{}, 0)
 	for folderRows.Next() {
 		var (
-			id, name             string
+			id, name, ownerEmail string
 			createdAt, updatedAt time.Time
+			size                 int64
 		)
-		if err := folderRows.Scan(&id, &name, &createdAt, &updatedAt); err == nil {
+		if err := folderRows.Scan(&id, &name, &createdAt, &updatedAt, &ownerEmail, &size); err == nil {
 			sharedFolders = append(sharedFolders, map[string]interface{}{
-				"id":        id,
-				"name":      name,
-				"createdAt": createdAt,
-				"updatedAt": updatedAt,
+				"id":         id,
+				"name":       name,
+				"createdAt":  createdAt,
+				"updatedAt":  updatedAt,
+				"ownerEmail": ownerEmail,
+				"size":       size,
 			})
 		}
 	}
