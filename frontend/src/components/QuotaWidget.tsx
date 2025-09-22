@@ -1,39 +1,20 @@
-import { useEffect, useState } from "react";
-import { fetchQuota, type QuotaResponse } from "../api/quota";
+import { useEffect } from "react";
+import { useQuota } from "../contexts/QuotaContext";
 
 export default function QuotaWidget() {
-  const [quota, setQuota] = useState<QuotaResponse | null>(null);
+  const { quota, refreshQuota, isLoading } = useQuota();
 
   useEffect(() => {
-    let isMounted = true;
-
     const timer = setTimeout(() => {
-      fetchQuota()
-        .then((q) => {
-          if (isMounted) setQuota(q);
-        })
-        .catch((error) => {
-          console.error("Failed to fetch quota:", error);
-          if (isMounted) {
-            setQuota({
-              original_bytes: 0,
-              deduped_bytes: 0,
-              quota_bytes: 1,
-              savings_bytes: 0,
-              savings_percent: 0,
-              quota_used_percent: 0,
-            });
-          }
-        });
-    }, 200); // Small delay to avoid rate limiting
+      refreshQuota();
+    }, 200);
 
     return () => {
-      isMounted = false;
       clearTimeout(timer);
     };
-  }, []);
+  }, [refreshQuota]);
 
-  if (!quota) {
+  if (!quota || isLoading) {
     return (
       <div className="mt-auto">
         <div className="text-sm mb-1">Loading storage info...</div>

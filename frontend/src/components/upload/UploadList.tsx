@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { uploadManager, type UploadItem } from "@/lib/uploadManager";
 import { Button } from "@/components/ui/button";
 import { CircleX, X } from "lucide-react";
@@ -17,12 +17,36 @@ function ProgressBar({ value }: { value: number }) {
 export function UploadList() {
   const [items, setItems] = useState<UploadItem[]>(uploadManager.getItems());
   const [open, setOpen] = useState(true);
+  const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const listener = (i: UploadItem[]) => setItems(i);
     uploadManager.on(listener);
     return () => uploadManager.off(listener);
   }, []);
+
+  useEffect(() => {
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (!items.length) return;
+
+    const hasTerminal = items.some((it) =>
+      ["done", "error", "aborted"].includes(it.status)
+    );
+    if (hasTerminal) {
+      timerRef.current = window.setTimeout(() => setOpen(false), 3000);
+    }
+
+    return () => {
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [items]);
 
   if (!open || !items.length) return null;
 
@@ -40,7 +64,7 @@ export function UploadList() {
           </button>
         </div>
         <div className="space-y-2 max-h-72 overflow-auto pr-1">
-          {items.map((it) => (
+          {items.slice(0, 5).map((it) => (
             <div key={it.id} className="flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between text-xs mb-1">

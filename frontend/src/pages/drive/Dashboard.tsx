@@ -70,6 +70,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { useQuota } from "../../contexts/QuotaContext";
 
 const getFileIcon = (mimeType?: string, isFolder?: boolean) => {
   if (isFolder) return Folder;
@@ -102,6 +103,7 @@ const formatDate = (dateString: string) => {
 export default function Home() {
   const { folderId } = useParams<{ folderId: string }>();
   const navigate = useNavigate();
+  const { refreshQuota } = useQuota();
 
   const {
     items,
@@ -352,6 +354,23 @@ export default function Home() {
       return () => clearTimeout(timer);
     }
   }, [toastMessage]);
+
+  // Call quota API whenever items array size changes
+  useEffect(() => {
+    const updateQuotaData = async () => {
+      try {
+        await refreshQuota();
+        console.log("Quota data refreshed due to items array change");
+      } catch (error) {
+        console.error("Failed to refresh quota:", error);
+      }
+    };
+
+    if (items.length >= 0) {
+      // Call even when items is empty (0 items)
+      updateQuotaData();
+    }
+  }, [items.length, refreshQuota]); // Only trigger when array size changes
 
   // Operation handlers
   const handleDownload = async (item: DriveItem) => {

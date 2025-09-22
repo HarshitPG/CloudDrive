@@ -1,5 +1,10 @@
 import { create } from "zustand";
 import axios from "axios";
+import {
+  getTokenFromCookie,
+  setTokenCookie,
+  removeTokenCookie,
+} from "../lib/token";
 
 type User = {
   id: string;
@@ -25,15 +30,15 @@ const authAxios = axios.create({
 });
 
 export const useAuthStore = create<AuthState>((set) => ({
-  accessToken: null,
+  accessToken: getTokenFromCookie(),
   user: null,
-  isAuthenticated: false,
+  isAuthenticated: !!getTokenFromCookie(),
 
-  setAccessToken: (t: string | null) =>
-    set({
-      accessToken: t,
-      isAuthenticated: !!t,
-    }),
+  setAccessToken: (t: string | null) => {
+    if (t) setTokenCookie(t);
+    else removeTokenCookie();
+    set({ accessToken: t, isAuthenticated: !!t });
+  },
 
   setUser: (u: User) => set({ user: u }),
 
@@ -41,6 +46,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     const res = await authAxios.post("/api/v1/auth/login", { email, password });
     const { access_token } = res.data;
     if (!access_token) throw new Error("missing access token from server");
+    setTokenCookie(access_token);
     set({
       accessToken: access_token,
       user: { id: "", email },
@@ -54,6 +60,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       //
     } finally {
+      removeTokenCookie();
       set({ accessToken: null, user: null, isAuthenticated: false });
     }
   },
@@ -63,6 +70,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   clearAuth: () => {
+    removeTokenCookie();
     set({ accessToken: null, user: null, isAuthenticated: false });
   },
 }));
