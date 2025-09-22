@@ -20,6 +20,8 @@ import (
 	"backend/internal/api/graphql/generated"
 
 	"github.com/99designs/gqlgen/graphql/handler"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -43,6 +45,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.GET("/", s.HelloWorldHandler)
 	r.GET("/health", s.healthHandler)
 
+	// Swagger UI (served at /swagger/index.html)
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	jwtSecret := os.Getenv("JWT_SECRET")
 
 	// GraphQL handlers (POST for queries/mutations)
@@ -52,6 +57,13 @@ func (s *Server) RegisterRoutes() http.Handler {
 				generated.Config{Resolvers: &graphqllayer.Resolver{DB: s.db.DB()}},
 			),
 		)
+		//	@Summary		GraphQL endpoint
+		//	@Description	Send GraphQL queries and mutations
+		//	@Tags			graphql
+		//	@Accept			json
+		//	@Produce		json
+		//	@Security		BearerAuth
+		//	@Router			/api/v1/graphql [post]
 		r.POST("/api/v1/graphql", auth.RequireAuth(jwtSecret), func(c *gin.Context) {
 			execSchema.ServeHTTP(c.Writer, c.Request)
 		})
@@ -69,6 +81,12 @@ func (s *Server) RegisterRoutes() http.Handler {
 		if err != nil {
 			logger.L.Fatal("storage init failed", zap.Error(err))
 		}
+		//	@Summary		WebSocket for download updates
+		//	@Description	Connect via WebSocket to receive download count updates. Optional query param fileId to filter.
+		//	@Tags			websocket
+		//	@Param			fileId	query		string	false	"Filter by file ID"
+		//	@Success		101		{string}	string	"Switching Protocols"
+		//	@Router			/api/v1/ws/downloads [get]
 		api.GET("/ws/downloads", auth.RequireAuth(jwtSecret), func(c *gin.Context) {
 			notifications.ServeWS(s.hub)(c.Writer, c.Request)
 		})

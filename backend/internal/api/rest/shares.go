@@ -16,7 +16,6 @@ func RegisterShareRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStora
 	h := &share.Handler{DB: db, Storage: st, Cache: c, Producer: worker.NewProducer()}
 
 	rg.GET("/s/:token", h.ResolveShare())
-
 	rg.GET("/fs/:token", h.ResolveFolderShare())
 	rg.GET("/fs/:token/contents", h.ResolveFolderShareContents())
 	rg.GET("/fs/:token/ancestors", h.ResolveFolderShareAncestors())

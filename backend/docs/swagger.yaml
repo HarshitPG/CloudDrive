@@ -1,0 +1,1841 @@
+basePath: /
+definitions:
+  api_rest.FolderInitFile:
+    properties:
+      mime:
+        type: string
+      path:
+        type: string
+      sha256:
+        type: string
+      size:
+        type: integer
+    type: object
+  api_rest.FolderInitRequest:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/api_rest.FolderInitFile'
+        type: array
+      idempotencyKey:
+        type: string
+      parentId:
+        type: string
+      rootName:
+        type: string
+    required:
+    - files
+    - rootName
+    type: object
+  api_rest.FolderInitResponse:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/uploads.FolderInitFileResponse'
+        type: array
+      folders:
+        items:
+          additionalProperties:
+            type: string
+          type: object
+        type: array
+      rootFolderId:
+        type: string
+      uploadId:
+        type: string
+    type: object
+  api_rest.abortRequest:
+    properties:
+      sessionId:
+        type: string
+    required:
+    - sessionId
+    type: object
+  api_rest.abortResponse:
+    properties:
+      message:
+        example: aborted
+        type: string
+    type: object
+  api_rest.completeRequest:
+    properties:
+      clientSha256:
+        type: string
+      folderId:
+        type: string
+      sessionId:
+        type: string
+    type: object
+  api_rest.createFolderRequest:
+    properties:
+      name:
+        type: string
+      parentId:
+        type: string
+    required:
+    - name
+    type: object
+  api_rest.createSessionRequest:
+    properties:
+      clientSha256:
+        type: string
+      declaredMime:
+        type: string
+      filename:
+        type: string
+      originalSize:
+        type: integer
+    type: object
+  api_rest.createSessionResponse:
+    properties:
+      existingFileId:
+        type: string
+      sessionId:
+        type: string
+      skipUpload:
+        type: boolean
+      tempBlobKey:
+        type: string
+      uploadUrl:
+        type: string
+      userFileId:
+        type: string
+    type: object
+  api_rest.downloadURLResponse:
+    properties:
+      downloadUrl:
+        example: https://storage.example.com/files/abc123.pdf
+        type: string
+    type: object
+  api_rest.errorResponse:
+    properties:
+      error:
+        example: invalid request
+        type: string
+    type: object
+  api_rest.fileListResponse:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/backend_internal_files.FileListItem'
+        type: array
+    type: object
+  api_rest.fileVersionsResponse:
+    properties:
+      versions:
+        items:
+          $ref: '#/definitions/backend_internal_files.FileVersion'
+        type: array
+    type: object
+  api_rest.forgotPasswordResponse:
+    properties:
+      message:
+        example: if the email exists, a reset link was sent
+        type: string
+    type: object
+  api_rest.forgotRequest:
+    properties:
+      email:
+        type: string
+    required:
+    - email
+    type: object
+  api_rest.loginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  api_rest.loginResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  api_rest.logoutRequest:
+    properties:
+      refresh_token:
+        type: string
+    type: object
+  api_rest.logoutResponse:
+    properties:
+      message:
+        example: logged out
+        type: string
+    type: object
+  api_rest.messageResponse:
+    properties:
+      message:
+        example: operation completed successfully
+        type: string
+    type: object
+  api_rest.moveFolderRequest:
+    properties:
+      targetParentId:
+        type: string
+    type: object
+  api_rest.moveRequest:
+    properties:
+      targetFolderId:
+        type: string
+    type: object
+  api_rest.patchRequest:
+    properties:
+      filename:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  api_rest.quotaUsageResponse:
+    properties:
+      deduped_bytes:
+        type: integer
+      original_bytes:
+        type: integer
+      quota_bytes:
+        type: integer
+      quota_used_percent:
+        type: number
+      savings_bytes:
+        type: integer
+      savings_percent:
+        type: number
+    type: object
+  api_rest.refreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    type: object
+  api_rest.refreshResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  api_rest.renameFolderRequest:
+    properties:
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  api_rest.resetPasswordResponse:
+    properties:
+      message:
+        example: password reset successful
+        type: string
+    type: object
+  api_rest.resetRequest:
+    properties:
+      newPassword:
+        minLength: 6
+        type: string
+      token:
+        type: string
+    required:
+    - newPassword
+    - token
+    type: object
+  api_rest.searchFileItem:
+    properties:
+      contentHash:
+        type: string
+      createdAt:
+        type: string
+      dedupSavings:
+        type: integer
+      downloadCount:
+        type: integer
+      filename:
+        type: string
+      id:
+        type: string
+      mime:
+        type: string
+      physicalSize:
+        type: integer
+      rank:
+        type: number
+      refCount:
+        type: integer
+      size:
+        type: integer
+      updatedAt:
+        type: string
+    type: object
+  api_rest.searchFilesResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api_rest.searchFileItem'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api_rest.signupRequest:
+    properties:
+      email:
+        type: string
+      fullName:
+        type: string
+      password:
+        minLength: 6
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  api_rest.signupResponse:
+    properties:
+      message:
+        example: user created
+        type: string
+      verification_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  api_rest.verifyResponse:
+    properties:
+      message:
+        example: email verified
+        type: string
+    type: object
+  backend_internal_files.FileListItem:
+    properties:
+      contentHash:
+        type: string
+      createdAt:
+        type: string
+      dedupSavings:
+        type: integer
+      deletedAt:
+        type: string
+      downloadCount:
+        type: integer
+      filename:
+        type: string
+      id:
+        type: string
+      mime:
+        type: string
+      physicalSize:
+        type: integer
+      refCount:
+        type: integer
+      size:
+        type: integer
+      updatedAt:
+        type: string
+    type: object
+  backend_internal_files.FileMetadata:
+    properties:
+      contentHash:
+        type: string
+      createdAt:
+        type: string
+      dedupSavings:
+        type: integer
+      downloadCount:
+        type: integer
+      filename:
+        type: string
+      folderId:
+        type: string
+      mime:
+        type: string
+      physicalSize:
+        type: integer
+      refCount:
+        type: integer
+      size:
+        type: integer
+      updatedAt:
+        type: string
+    type: object
+  backend_internal_files.FileVersion:
+    properties:
+      content_id:
+        type: string
+      created_at:
+        type: string
+      filename:
+        type: string
+      id:
+        type: string
+    type: object
+  server.GraphQLRequest:
+    properties:
+      operationName:
+        type: string
+      query:
+        type: string
+      variables:
+        additionalProperties: true
+        type: object
+    type: object
+  server.GraphQLResponse:
+    properties:
+      data: {}
+      errors:
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+    type: object
+  server.WSMessage:
+    properties:
+      downloadCount:
+        type: integer
+      fileId:
+        type: string
+      ts:
+        type: integer
+    type: object
+  uploads.FolderInitFileResponse:
+    properties:
+      deduped:
+        type: boolean
+      path:
+        type: string
+      sessionId:
+        type: string
+      targetFolderId:
+        type: string
+      tempBlobKey:
+        type: string
+      uploadUrl:
+        type: string
+      userFileId:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+    url: https://example.com/support
+  description: REST, GraphQL, and WebSocket endpoints for the file service.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: BalkanID File Service API
+  version: "1.0"
+paths:
+  /api/v1/admin/audit:
+    get:
+      description: Retrieve system audit log with user actions and system events
+      parameters:
+      - description: 'Maximum number of entries to return (1-1000, default: 100)'
+        in: query
+        name: limit
+        type: integer
+      - description: 'Number of entries to skip for pagination (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Audit log entries
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Admin access required
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get audit log (admin only)
+      tags:
+      - admin
+  /api/v1/admin/force-delete:
+    post:
+      consumes:
+      - application/json
+      description: Administratively force deletion of a user file or content, bypassing
+        normal deletion rules
+      parameters:
+      - description: Force delete request with userFileId or contentId
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Force delete scheduled
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Admin access required
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: File not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Force delete file or content (admin only)
+      tags:
+      - admin
+  /api/v1/admin/usage:
+    get:
+      description: Retrieve comprehensive system usage statistics including user storage
+        consumption
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: System usage statistics
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Admin access required
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get system usage statistics (admin only)
+      tags:
+      - admin
+  /api/v1/auth/forgot-password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Email payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api_rest.forgotRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_rest.forgotPasswordResponse'
+      summary: Forgot password
+      tags:
+      - auth
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Login payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api_rest.loginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_rest.loginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      summary: Login
+      tags:
+      - auth
+  /api/v1/auth/logout:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Logout payload
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/api_rest.logoutRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_rest.logoutResponse'
+      summary: Logout
+      tags:
+      - auth
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh payload
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/api_rest.refreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_rest.refreshResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      summary: Refresh token
+      tags:
+      - auth
+  /api/v1/auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Reset payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api_rest.resetRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_rest.resetPasswordResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      summary: Reset password
+      tags:
+      - auth
+  /api/v1/auth/signup:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account and returns a verification token in development
+      parameters:
+      - description: Signup payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api_rest.signupRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api_rest.signupResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      summary: Sign up
+      tags:
+      - auth
+  /api/v1/auth/verify:
+    get:
+      parameters:
+      - description: Verification token
+        in: query
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_rest.verifyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      summary: Verify email
+      tags:
+      - auth
+  /api/v1/files:
+    get:
+      consumes:
+      - application/json
+      description: List files with optional folder filtering and trash support
+      parameters:
+      - description: Filter by folder ID
+        in: query
+        name: folderId
+        type: string
+      - description: List deleted/trash files
+        in: query
+        name: deleted
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Files list response
+          schema:
+            $ref: '#/definitions/api_rest.fileListResponse'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List files
+      tags:
+      - files
+  /api/v1/files/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Move file to trash or permanently delete it
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Permanent delete (true) or move to trash (false)
+        in: query
+        name: permanent
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Delete confirmation
+          schema:
+            $ref: '#/definitions/api_rest.messageResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete file
+      tags:
+      - files
+    get:
+      consumes:
+      - application/json
+      description: Get detailed metadata for a specific file
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: File metadata
+          schema:
+            $ref: '#/definitions/backend_internal_files.FileMetadata'
+        "404":
+          description: File not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get file metadata
+      tags:
+      - files
+    patch:
+      consumes:
+      - application/json
+      description: Update file name, tags, or other metadata
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: File update payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api_rest.patchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Update confirmation
+          schema:
+            $ref: '#/definitions/api_rest.messageResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update file metadata
+      tags:
+      - files
+  /api/v1/files/{id}/download:
+    get:
+      consumes:
+      - application/json
+      description: Generate a pre-signed download URL for a file
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Download URL response
+          schema:
+            $ref: '#/definitions/api_rest.downloadURLResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get download URL
+      tags:
+      - files
+  /api/v1/files/{id}/move:
+    post:
+      consumes:
+      - application/json
+      description: Move a file to a different folder
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Move request payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api_rest.moveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Move confirmation
+          schema:
+            $ref: '#/definitions/api_rest.messageResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Move file to different folder
+      tags:
+      - files
+  /api/v1/files/{id}/restore:
+    post:
+      consumes:
+      - application/json
+      description: Restore a deleted file from trash
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Restore confirmation
+          schema:
+            $ref: '#/definitions/api_rest.messageResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Restore file from trash
+      tags:
+      - files
+  /api/v1/files/{id}/versions:
+    get:
+      consumes:
+      - application/json
+      description: Get all versions of a file
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: File versions list
+          schema:
+            $ref: '#/definitions/api_rest.fileVersionsResponse'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List file versions
+      tags:
+      - files
+    post:
+      consumes:
+      - application/json
+      description: Create a new version of an existing file
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Version creation payload
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Version created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create new file version
+      tags:
+      - files
+  /api/v1/folders:
+    get:
+      consumes:
+      - application/json
+      description: List user's folders with optional parent filtering and trash support
+      parameters:
+      - description: Parent folder ID
+        in: query
+        name: parentId
+        type: string
+      - description: List deleted folders
+        in: query
+        name: deleted
+        type: boolean
+      - description: Limit results (default 20)
+        in: query
+        name: limit
+        type: integer
+      - description: Offset for pagination (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Folders list response
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List folders
+      tags:
+      - folders
+    post:
+      consumes:
+      - application/json
+      description: Create a new folder under optional parent
+      parameters:
+      - description: Folder creation payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api_rest.createFolderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created folder response
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create folder
+      tags:
+      - folders
+  /api/v1/folders/{id}:
+    delete:
+      description: Permanently delete a folder and all its contents (files and subfolders)
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Delete confirmation
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Folder not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete folder
+      tags:
+      - folders
+    patch:
+      consumes:
+      - application/json
+      description: Update the name of a folder
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Rename request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api_rest.renameFolderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Rename confirmation
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Rename folder
+      tags:
+      - folders
+  /api/v1/folders/{id}/ancestors:
+    get:
+      description: Retrieve the path of ancestor folders from root to the specified
+        folder
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Array of ancestor folders
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Folder not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get folder ancestors
+      tags:
+      - folders
+  /api/v1/folders/{id}/contents:
+    get:
+      consumes:
+      - application/json
+      description: Get all files and subfolders within a folder
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Folder contents
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Folder not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List folder contents
+      tags:
+      - folders
+  /api/v1/folders/{id}/download:
+    get:
+      description: Download a folder and its contents as a ZIP archive
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/zip
+      responses:
+        "200":
+          description: ZIP archive
+          schema:
+            type: file
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Folder not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Download folder as archive
+      tags:
+      - folders
+  /api/v1/folders/{id}/files:
+    get:
+      description: Retrieve all files contained within a specific folder
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Items per page (default: 20)'
+        in: query
+        name: limit
+        type: integer
+      - description: Sort field (name, created_at, updated_at)
+        in: query
+        name: sort
+        type: string
+      - description: Sort order (asc, desc)
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Array of files
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Folder not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List files in folder
+      tags:
+      - folders
+  /api/v1/folders/{id}/move:
+    patch:
+      consumes:
+      - application/json
+      description: Move a folder to a different parent folder
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Move request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api_rest.moveFolderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Updated folder information
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Folder not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Move folder
+      tags:
+      - folders
+  /api/v1/folders/{id}/tree:
+    get:
+      description: Retrieve the hierarchical tree structure of a folder and its subfolders
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 'Maximum depth to traverse (default: unlimited)'
+        in: query
+        name: depth
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Folder tree structure
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Folder not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get folder tree structure
+      tags:
+      - folders
+  /api/v1/graphql:
+    post:
+      consumes:
+      - application/json
+      description: Send GraphQL queries and mutations
+      parameters:
+      - description: GraphQL request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.GraphQLRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.GraphQLResponse'
+      security:
+      - BearerAuth: []
+      summary: GraphQL endpoint
+      tags:
+      - graphql
+  /api/v1/search/files:
+    get:
+      description: Search for files using various filters including query text, MIME
+        type, folder location, and uploader
+      parameters:
+      - description: Search query text for file names and content
+        in: query
+        name: q
+        type: string
+      - description: Filter by MIME type (e.g., image/jpeg, text/plain)
+        in: query
+        name: mime
+        type: string
+      - description: Filter by parent folder ID
+        in: query
+        name: folderId
+        type: string
+      - description: Filter by uploader user ID
+        in: query
+        name: uploader
+        type: string
+      - description: Sort order (name, size, created_at, updated_at)
+        in: query
+        name: sort
+        type: string
+      - description: 'Maximum results to return (1-200, default: 50)'
+        in: query
+        name: limit
+        type: integer
+      - description: 'Number of results to skip for pagination (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Search results with files array and metadata
+          schema:
+            $ref: '#/definitions/api_rest.searchFilesResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Search files across the system
+      tags:
+      - search
+  /api/v1/uploads/abort:
+    post:
+      consumes:
+      - application/json
+      description: Cancel an ongoing upload session and clean up any partial uploads
+      parameters:
+      - description: Upload abort request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api_rest.abortRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Upload aborted successfully
+          schema:
+            $ref: '#/definitions/api_rest.abortResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Session not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Abort file upload
+      tags:
+      - uploads
+  /api/v1/uploads/complete:
+    post:
+      consumes:
+      - application/json
+      description: Complete a multipart upload session and finalize the file
+      parameters:
+      - description: Upload completion request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api_rest.completeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Upload completed successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Session not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "413":
+          description: Quota exceeded
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Complete file upload
+      tags:
+      - uploads
+  /api/v1/uploads/folder/init:
+    post:
+      consumes:
+      - application/json
+      description: Initialize upload session for a folder structure with multiple
+        files
+      parameters:
+      - description: Folder initialization request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api_rest.FolderInitRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Upload session initialized
+          schema:
+            $ref: '#/definitions/api_rest.FolderInitResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "413":
+          description: Quota exceeded
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Initialize folder upload
+      tags:
+      - uploads
+  /api/v1/uploads/session:
+    post:
+      consumes:
+      - application/json
+      description: Create a new file upload session with presigned URLs for multipart
+        upload
+      parameters:
+      - description: Upload session request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api_rest.createSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: File already exists (skip upload)
+          schema:
+            $ref: '#/definitions/api_rest.createSessionResponse'
+        "201":
+          description: Upload session created
+          schema:
+            $ref: '#/definitions/api_rest.createSessionResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "413":
+          description: Quota exceeded
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create upload session
+      tags:
+      - uploads
+  /api/v1/users/{id}/quota:
+    patch:
+      consumes:
+      - application/json
+      description: Update the storage quota limit for a specific user (requires admin
+        privileges)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Quota update request
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties:
+            type: integer
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Quota updated successfully
+          schema:
+            $ref: '#/definitions/api_rest.messageResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+        "403":
+          description: Admin access required
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update user quota (admin only)
+      tags:
+      - quota
+  /api/v1/users/me/usage:
+    get:
+      description: Retrieve quota usage statistics for the authenticated user including
+        storage metrics and savings
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Quota usage details
+          schema:
+            $ref: '#/definitions/api_rest.quotaUsageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current user quota usage
+      tags:
+      - quota
+  /api/v1/ws/downloads:
+    get:
+      description: Connect via WebSocket to receive download count updates. Optional
+        query param fileId to filter.
+      parameters:
+      - description: Filter by file ID
+        in: query
+        name: fileId
+        type: string
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+        "200":
+          description: Example server message (for documentation only)
+          schema:
+            $ref: '#/definitions/server.WSMessage'
+      summary: WebSocket for download updates
+      tags:
+      - websocket
+securityDefinitions:
+  BearerAuth:
+    description: 'Provide a Bearer token: "Bearer {access_token}"'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
