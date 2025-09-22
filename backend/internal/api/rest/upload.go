@@ -2,6 +2,7 @@ package rest
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 
 	"backend/internal/auth"
@@ -55,6 +56,10 @@ func (h *uploadHandler) folderInit(c *gin.Context) {
 	}
 	res, err := h.svc.FolderInit(c.Request.Context(), userID, req.ParentID, req.RootName, req.Files)
 	if err != nil {
+		if errors.Is(err, uploadsvc.ErrQuotaExceeded) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "quota exceeded"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -77,6 +82,10 @@ func (h *uploadHandler) createSession(c *gin.Context) {
 	}
 	res, err := h.svc.CreateSession(c.Request.Context(), userID, uploadsvc.CreateSessionRequest(req))
 	if err != nil {
+		if errors.Is(err, uploadsvc.ErrQuotaExceeded) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "quota exceeded"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -104,6 +113,10 @@ func (h *uploadHandler) complete(c *gin.Context) {
 	if err != nil {
 		if err.Error() == "not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			return
+		}
+		if errors.Is(err, uploadsvc.ErrQuotaExceeded) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "quota exceeded"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

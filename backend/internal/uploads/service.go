@@ -28,6 +28,23 @@ func (s *service) FolderInit(ctx context.Context, userID, parentID, rootName str
 		return FolderInitResponse{}, fmt.Errorf("no files provided")
 	}
 
+	// Quota pre-check: ensure the total size of incoming files fits into remaining quota
+	var totalIncoming int64
+	for _, f := range files {
+		if f.Size > 0 {
+			totalIncoming += f.Size
+		}
+	}
+	if totalIncoming > 0 {
+		used, quota, err := s.getUsageAndQuota(ctx, userID)
+		if err != nil {
+			return FolderInitResponse{}, err
+		}
+		if used+totalIncoming > quota {
+			return FolderInitResponse{}, ErrQuotaExceeded
+		}
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return FolderInitResponse{}, err
