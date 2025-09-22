@@ -33,12 +33,12 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import ShareModal from "@/components/ShareModal";
-import MoveModal from "@/components/MoveModal";
-import FileEditDialog from "@/components/FileEditDialog";
-import FolderEditDialog from "@/components/FolderEditDialog";
-import CreateFolderDialog from "@/components/CreateFolderDialog";
-import FilterModal from "@/components/FilterModal";
+import ShareModal from "@/components/modal/ShareModal";
+import MoveModal from "@/components/modal/MoveModal";
+import FileEditDialog from "@/components/dialog/FileEditDialog";
+import FolderEditDialog from "@/components/dialog/FolderEditDialog";
+import CreateFolderDialog from "@/components/dialog/CreateFolderDialog";
+import FilterModal from "@/components/modal/FilterModal";
 import { useDriveStore, type DriveItem } from "../../stores/drive";
 import type { FileItem } from "../../api/files";
 import type { FolderItem } from "../../api/folders";
@@ -57,9 +57,8 @@ import {
   publicShareApi,
 } from "../../api/operations";
 import { downloadUrlToFile } from "@/lib/utils";
-import { UploadList } from "@/components/upload/UploadList";
 import { uploadManager } from "@/lib/uploadManager";
-import FullscreenPreviewModal from "@/components/FullscreenPreviewModal";
+import FullscreenPreviewModal from "@/components/previewer/FullscreenPreviewModal";
 import Breadcrumbs, { type Crumb } from "@/components/ui/Breadcrumbs";
 import { getFolderAncestors } from "../../api/folders";
 import {
@@ -1041,8 +1040,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Upload list floating panel */}
-      <UploadList />
+      {/* Upload list handled globally in DashboardLayout */}
     </>
   );
 }

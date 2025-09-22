@@ -25,7 +25,7 @@ import {
   type SharedFolderData,
   type SharedFolderItem,
 } from "@/api/operations";
-import FullscreenPreviewModal from "@/components/FullscreenPreviewModal";
+import FullscreenPreviewModal from "@/components/previewer/FullscreenPreviewModal";
 
 const getFileType = (filename: string): string => {
   const ext = filename.toLowerCase().split(".").pop() || "";

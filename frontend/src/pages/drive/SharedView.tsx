@@ -20,7 +20,7 @@ import {
   folderOperationsApi,
 } from "@/api/operations";
 import { downloadUrlToFile } from "@/lib/utils";
-import FullscreenPreviewModal from "@/components/FullscreenPreviewModal";
+import FullscreenPreviewModal from "@/components/previewer/FullscreenPreviewModal";
 
 type SharedFile = {
   id: string;

@@ -12,7 +12,7 @@ export default function StarredView() {
       <div>
         <h1 className="text-2xl font-bold text-foreground mb-2">Starred</h1>
         <p className="text-muted-foreground">
-          Files and folders you've starred
+          Files and folders you've starred (Coming Soon)
         </p>
       </div>
 

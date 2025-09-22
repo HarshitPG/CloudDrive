@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { X } from "lucide-react";
-import FilePreviewer from "@/components/FilePreviewer";
+import FilePreviewer from "@/components/previewer/FilePreviewer";
 import { getFileKind } from "@/lib/fileKind";
 
 export type FullscreenPreviewModalProps = {

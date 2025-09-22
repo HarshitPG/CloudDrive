@@ -16,7 +16,8 @@ function ProgressBar({ value }: { value: number }) {
 
 export function UploadList() {
   const [items, setItems] = useState<UploadItem[]>(uploadManager.getItems());
-  const [open, setOpen] = useState(true);
+  // Start closed; open only when there are active uploads
+  const [open, setOpen] = useState(false);
   const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -26,17 +27,32 @@ export function UploadList() {
   }, []);
 
   useEffect(() => {
+    // Clear any previous auto-close timer
     if (timerRef.current) {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
 
-    if (!items.length) return;
+    // Close if there are no items at all
+    if (!items.length) {
+      setOpen(false);
+      return;
+    }
 
+    const hasActive = items.some((it) =>
+      ["queued", "hashing", "creating", "uploading", "completing"].includes(
+        it.status
+      )
+    );
     const hasTerminal = items.some((it) =>
       ["done", "error", "aborted"].includes(it.status)
     );
-    if (hasTerminal) {
+
+    // Open automatically when there are active uploads
+    if (hasActive) setOpen(true);
+
+    // If only terminal states remain, auto-close after a short delay
+    if (!hasActive && hasTerminal) {
       timerRef.current = window.setTimeout(() => setOpen(false), 3000);
     }
 

@@ -34,7 +34,7 @@ export default function QuotaWidget() {
   return (
     <div className="mt-auto">
       <div className="text-sm mb-1">
-        Storage: {Math.round(quota.original_bytes / 1024 / 1024)}MB /{" "}
+        Storage: {Math.round(totalUsed / 1024 / 1024)}MB /{" "}
         {Math.round(quota.quota_bytes / 1024 / 1024)}MB
       </div>
       <div className="w-full bg-gray-200 rounded h-2">
@@ -48,6 +48,10 @@ export default function QuotaWidget() {
           {quota.savings_percent.toFixed(1)}% saved by deduplication
         </div>
       )}
+      <p className="text-xs text-muted-foreground mt-1">
+        Files and folders present in trash also count towards your storage
+        quota.
+      </p>
     </div>
   );
 }

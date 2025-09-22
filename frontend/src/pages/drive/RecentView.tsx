@@ -12,7 +12,7 @@ export default function RecentView() {
       <div>
         <h1 className="text-2xl font-bold text-foreground mb-2">Recent</h1>
         <p className="text-muted-foreground">
-          Recently accessed files and folders
+          Recently accessed files and folders (Coming Soon)
         </p>
       </div>
 

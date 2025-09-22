@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Download, ArrowLeft } from "lucide-react";
 import { downloadUrlToFile } from "@/lib/utils";
-import FilePreviewer from "@/components/FilePreviewer";
+import FilePreviewer from "@/components/previewer/FilePreviewer";
 import type { ResolvedPublicFile } from "@/api/operations";
 
 export default function PublicFileView({ file }: { file: ResolvedPublicFile }) {

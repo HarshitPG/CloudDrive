@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, MoveRight, Folder, Home } from "lucide-react";
 import { type FolderItem } from "@/api/folders";
-import FolderTreeSelector, { type FolderTreeNode } from "./FolderTreeSelector";
+import FolderTreeSelector, { type FolderTreeNode } from "../FolderTreeSelector";
 
 export type MoveTarget = {
   id: string;
