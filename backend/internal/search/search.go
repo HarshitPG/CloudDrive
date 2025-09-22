@@ -6,22 +6,22 @@ import (
 	"time"
 )
 
+// Params defines file search parameters.
 type Params struct {
-	UserID      string
-	Q           string
-	Mime        string
-	MinSize     *int64
-	MaxSize     *int64
-	DateFrom    *time.Time
-	DateTo      *time.Time
-	Tags        []string
-	Uploader    string
-	FolderID    string
-	Limit       int
-	Offset      int
-	Sort        string
-	IncludeRank bool
-	//(per-user shares).
+	UserID        string
+	Q             string
+	Mime          string
+	MinSize       *int64
+	MaxSize       *int64
+	DateFrom      *time.Time
+	DateTo        *time.Time
+	Tags          []string
+	Uploader      string
+	FolderID      string
+	Limit         int
+	Offset        int
+	Sort          string
+	IncludeRank   bool
 	IncludeShared bool
 }
 
@@ -47,7 +47,6 @@ func BuildQuery(p Params) (string, string, []interface{}) {
 		argIdx++
 	}
 	if p.Mime != "" {
-		// Support prefix search: allow passing "image/" to match image/png, image/jpeg, etc.
 		if strings.HasSuffix(p.Mime, "/") {
 			where = append(where, fmt.Sprintf("uf.declared_mime ILIKE $%d", argIdx))
 			args = append(args, p.Mime+"%")
@@ -70,7 +69,6 @@ func BuildQuery(p Params) (string, string, []interface{}) {
 			}
 
 			if group, ok := mimeGroups[p.Mime]; ok {
-				// Build OR clause for group
 				parts := []string{}
 				for _, m := range group {
 					parts = append(parts, fmt.Sprintf("uf.declared_mime = $%d", argIdx))
@@ -180,4 +178,117 @@ LIMIT %d OFFSET %d
 	countQuery := fmt.Sprintf("SELECT COUNT(1) FROM user_files uf %s %s", joinUsers, whereSQL)
 
 	return query, countQuery, args
+}
+
+func BuildQueryScoped(p Params, rootOnly bool) (string, string, []interface{}) {
+	q, c, args := BuildQuery(p)
+	if rootOnly && p.FolderID == "" {
+		q = injectBefore(q, "ORDER BY", " AND uf.folder_id IS NULL ")
+		c = c + " AND uf.folder_id IS NULL "
+	}
+	return q, c, args
+}
+
+type FolderParams struct {
+	UserID   string
+	Q        string
+	ParentID string
+	Limit    int
+	Offset   int
+	Sort     string
+	AnyDepth bool
+}
+
+func BuildFolderQuery(p FolderParams) (string, string, []interface{}) {
+	where := []string{"f.deleted_at IS NULL"}
+	args := []interface{}{}
+	idx := 1
+
+	if p.UserID != "" {
+		where = append(where, fmt.Sprintf(`(
+            f.user_id = $%d OR EXISTS (
+                SELECT 1 FROM share_users su JOIN shares s ON su.share_id = s.id
+                WHERE s.target_type='folder' AND s.revoked=false AND s.target_id=f.id AND su.target_user_id=$%d
+            )
+        )`, idx, idx))
+		args = append(args, p.UserID)
+		idx++
+	}
+
+	if p.ParentID == "" {
+		if !p.AnyDepth {
+			where = append(where, "f.parent_id IS NULL")
+		}
+	} else {
+		where = append(where, fmt.Sprintf("f.parent_id = $%d", idx))
+		args = append(args, p.ParentID)
+		idx++
+	}
+
+	rankSel := ", NULL as rank"
+	orderRank := ""
+	if p.Q != "" {
+		where = append(where, fmt.Sprintf("f.name ILIKE $%d", idx))
+		args = append(args, "%"+p.Q+"%")
+		rankSel = fmt.Sprintf(", similarity(lower(f.name), lower($%d)) as rank", idx)
+		orderRank = "rank DESC,"
+		idx++
+	}
+
+	orderBy := "f.created_at DESC"
+	switch strings.ToLower(p.Sort) {
+	case "created_at_asc":
+		orderBy = "f.created_at ASC"
+	case "name_asc":
+		orderBy = "f.name ASC"
+	case "name_desc":
+		orderBy = "f.name DESC"
+	}
+
+	limit := p.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	offset := p.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	whereSQL := ""
+	if len(where) > 0 {
+		whereSQL = "WHERE " + strings.Join(where, " AND ")
+	}
+
+	query := fmt.Sprintf(`
+SELECT
+  f.id, f.name,
+  COALESCE((SELECT SUM(fc.size_bytes)
+            FROM user_files uf JOIN file_contents fc ON uf.content_id=fc.id
+            WHERE uf.folder_id=f.id AND uf.deleted_at IS NULL), 0) AS size,
+  f.created_at, f.updated_at %s
+FROM folders f
+%s
+ORDER BY %s %s
+LIMIT %d OFFSET %d
+`, rankSel, whereSQL, orderRank, orderBy, limit, offset)
+
+	countQuery := fmt.Sprintf("SELECT COUNT(1) FROM folders f %s", whereSQL)
+	return query, countQuery, args
+}
+
+func injectBefore(s, token, snippet string) string {
+	i := indexOf(s, token)
+	if i < 0 {
+		return s + snippet
+	}
+	return s[:i] + snippet + s[i:]
+}
+
+func indexOf(s, token string) int {
+	for i := 0; i+len(token) <= len(s); i++ {
+		if s[i:i+len(token)] == token {
+			return i
+		}
+	}
+	return -1
 }

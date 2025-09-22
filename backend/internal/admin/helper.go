@@ -1,8 +1,6 @@
-package rest
+package admin
 
-import (
-	"encoding/json"
-)
+import "encoding/json"
 
 func mapToJSON(m interface{}) string {
 	b, err := json.Marshal(m)

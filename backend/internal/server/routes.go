@@ -76,10 +76,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 		rest.RegisterAdminRoutes(api, s.db.DB(), jwtSecret)
 		rest.RegisterQuotaRoutes(api, s.db.DB(), jwtSecret)
 		rest.RegisterSearchRoutes(api, s.db.DB(), jwtSecret, s.cache)
-		rest.RegisterFolderRoutes(api, s.db.DB(), jwtSecret, s.cache, st)
 		rest.RegisterShareRoutes(api, s.db.DB(), st, jwtSecret, s.cache)
-		rest.RegisterFolderShareRoutes(api, s.db.DB(), st, jwtSecret, s.cache)
-		rest.RegisterUploadRoutes(api, s.db.DB(), st, jwtSecret)
+		rest.RegisterUploadRoutes(api, s.db.DB(), st, jwtSecret, s.cache)
+		rest.RegisterFolderRoutes(api, s.db.DB(), jwtSecret, s.cache, st)
 		rest.RegisterFileRoutes(api, s.db.DB(), st, jwtSecret, s.cache, func(ctx context.Context, fileID string, count int64) error {
 			return notifications.PublishDownload(ctx, s.rdb, fileID, count)
 		})
