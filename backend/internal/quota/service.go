@@ -6,27 +6,15 @@ import (
 
 func (s *service) GetUsage(ctx context.Context, userID string) (Usage, error) {
 	var out Usage
-	if err := s.db.QueryRowContext(ctx, `
-        SELECT COALESCE(SUM(original_size_bytes),0) FROM user_files
-        WHERE user_id=$1
-    `, userID).Scan(&out.OriginalBytes); err != nil {
+	if err := s.db.QueryRowContext(ctx, qGetOriginalBytes, userID).Scan(&out.OriginalBytes); err != nil {
 		return Usage{}, err
 	}
 
-	if err := s.db.QueryRowContext(ctx, `
-        SELECT COALESCE(SUM(fc.size_bytes),0)
-        FROM file_contents fc
-        JOIN (
-            SELECT DISTINCT content_id FROM user_files
-            WHERE user_id=$1
-        ) u ON u.content_id = fc.id
-    `, userID).Scan(&out.DedupedBytes); err != nil {
+	if err := s.db.QueryRowContext(ctx, qGetDedupedBytes, userID).Scan(&out.DedupedBytes); err != nil {
 		return Usage{}, err
 	}
 
-	if err := s.db.QueryRowContext(ctx, `
-        SELECT quota_bytes FROM users WHERE id=$1
-    `, userID).Scan(&out.QuotaBytes); err != nil {
+	if err := s.db.QueryRowContext(ctx, qGetQuotaBytes, userID).Scan(&out.QuotaBytes); err != nil {
 		return Usage{}, err
 	}
 
@@ -45,6 +33,6 @@ func (s *service) GetUsage(ctx context.Context, userID string) (Usage, error) {
 }
 
 func (s *service) UpdateQuota(ctx context.Context, targetUserID string, quotaBytes int64) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE users SET quota_bytes=$1 WHERE id=$2`, quotaBytes, targetUserID)
+	_, err := s.db.ExecContext(ctx, qUpdateQuota, quotaBytes, targetUserID)
 	return err
 }

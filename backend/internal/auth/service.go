@@ -58,7 +58,7 @@ func (s *service) Signup(ctx context.Context, email, password, fullName string) 
 	}
 
 	var exists bool
-	err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE email=$1)", email).Scan(&exists)
+	err := s.db.QueryRowContext(ctx, qCheckUserExists, email).Scan(&exists)
 	if err != nil {
 		return "", err
 	}
@@ -73,10 +73,7 @@ func (s *service) Signup(ctx context.Context, email, password, fullName string) 
 
 	verToken := uuid.NewString()
 
-	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO users (email, full_name, password_hash, verification_token, is_email_verified, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,false,now(),now())
-	`, email, fullName, string(pwhash), verToken)
+	_, err = s.db.ExecContext(ctx, qInsertUser, email, fullName, string(pwhash), verToken)
 	if err != nil {
 		return "", err
 	}
@@ -96,10 +93,7 @@ func (s *service) VerifyEmail(ctx context.Context, token string) error {
 	if token == "" {
 		return errors.New("token required")
 	}
-	res, err := s.db.ExecContext(ctx, `
-		UPDATE users SET is_email_verified = true, verification_token = NULL, updated_at = now()
-		WHERE verification_token = $1
-	`, token)
+	res, err := s.db.ExecContext(ctx, qVerifyEmail, token)
 	if err != nil {
 		return err
 	}
@@ -114,7 +108,7 @@ func (s *service) Login(ctx context.Context, email, password string) (string, st
 	var id string
 	var pwhash sql.NullString
 	var verified bool
-	err := s.db.QueryRowContext(ctx, "SELECT id,password_hash,is_email_verified FROM users WHERE email=$1", email).
+	err := s.db.QueryRowContext(ctx, qGetUserCredentials, email).
 		Scan(&id, &pwhash, &verified)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -150,7 +144,7 @@ func (s *service) Refresh(ctx context.Context, refreshToken string) (string, str
 	//‼️find matching refresh_tokens row by comparing hashed token
 	//‼️For simplicity store plain token hash using bcrypt.CompareHashAndPassword
 	//‼️In production,might HMAC + store, or use JWT refresh tokens with jti
-	rows, err := s.db.QueryContext(ctx, "SELECT id, user_id, token_hash, expires_at, revoked_at FROM refresh_tokens WHERE revoked_at IS NULL AND expires_at > now()")
+	rows, err := s.db.QueryContext(ctx, qGetActiveRefreshTokens)
 	if err != nil {
 		return "", "", err
 	}
@@ -184,7 +178,7 @@ func (s *service) Refresh(ctx context.Context, refreshToken string) (string, str
 		return "", "", err
 	}
 
-	_, err = s.db.ExecContext(ctx, "UPDATE refresh_tokens SET revoked_at=now() WHERE id=$1", foundID)
+	_, err = s.db.ExecContext(ctx, qRevokeRefreshToken, foundID)
 	if err != nil {
 		logger.L.Warn("failed revoke old refresh", zapField("err", err.Error()))
 	}
@@ -193,7 +187,7 @@ func (s *service) Refresh(ctx context.Context, refreshToken string) (string, str
 }
 
 func (s *service) Logout(ctx context.Context, refreshToken string) error {
-	rows, err := s.db.QueryContext(ctx, "SELECT id, token_hash FROM refresh_tokens WHERE revoked_at IS NULL")
+	rows, err := s.db.QueryContext(ctx, qGetAllRefreshTokens)
 	if err != nil {
 		return err
 	}
@@ -211,7 +205,7 @@ func (s *service) Logout(ctx context.Context, refreshToken string) error {
 		}
 	}
 	if foundID != "" {
-		_, err := s.db.ExecContext(ctx, "UPDATE refresh_tokens SET revoked_at=now() WHERE id=$1", foundID)
+		_, err := s.db.ExecContext(ctx, qRevokeRefreshToken, foundID)
 		return err
 	}
 	return nil
@@ -222,7 +216,7 @@ func (s *service) ForgotPassword(ctx context.Context, email string) error {
 		return errors.New("email required")
 	}
 	var id string
-	err := s.db.QueryRowContext(ctx, "SELECT id FROM users WHERE email=$1", email).Scan(&id)
+	err := s.db.QueryRowContext(ctx, qGetUserByEmail, email).Scan(&id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil
@@ -231,7 +225,7 @@ func (s *service) ForgotPassword(ctx context.Context, email string) error {
 	}
 	resetTok := uuid.NewString()
 	expires := time.Now().Add(1 * time.Hour)
-	_, err = s.db.ExecContext(ctx, "UPDATE users SET reset_password_token=$1, reset_password_expires_at=$2 WHERE id=$3", resetTok, expires, id)
+	_, err = s.db.ExecContext(ctx, qSetResetToken, resetTok, expires, id)
 	if err != nil {
 		return err
 	}
@@ -251,7 +245,7 @@ func (s *service) ResetPassword(ctx context.Context, token, newPassword string) 
 	}
 	var id string
 	var expires sql.NullTime
-	err := s.db.QueryRowContext(ctx, "SELECT id, reset_password_expires_at FROM users WHERE reset_password_token=$1", token).Scan(&id, &expires)
+	err := s.db.QueryRowContext(ctx, qGetResetTokenInfo, token).Scan(&id, &expires)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("invalid token")
@@ -265,7 +259,7 @@ func (s *service) ResetPassword(ctx context.Context, token, newPassword string) 
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, "UPDATE users SET password_hash=$1, reset_password_token=NULL, reset_password_expires_at=NULL WHERE id=$2", string(pwhash), id)
+	_, err = s.db.ExecContext(ctx, qResetPassword, string(pwhash), id)
 	if err != nil {
 		return err
 	}
@@ -294,7 +288,7 @@ func (s *service) createAndStoreRefreshToken(ctx context.Context, uid uuid.UUID)
 		return "", err
 	}
 	expires := time.Now().Add(s.refreshTTL)
-	_, err = s.db.ExecContext(ctx, "INSERT INTO refresh_tokens (user_id, token_hash, expires_at, created_at) VALUES ($1,$2,$3,now())", uid.String(), string(hash), expires)
+	_, err = s.db.ExecContext(ctx, qInsertRefreshToken, uid.String(), string(hash), expires)
 	if err != nil {
 		return "", err
 	}

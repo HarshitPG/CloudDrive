@@ -52,14 +52,9 @@ func (s *service) FolderInit(ctx context.Context, userID, parentID, rootName str
 	defer tx.Rollback()
 
 	var rootFolderID string
-	q := `SELECT id FROM folders WHERE user_id=$1 AND COALESCE(parent_id::text,'') = NULLIF($2,'') AND name=$3 AND deleted_at IS NULL LIMIT 1`
-	err = tx.QueryRowContext(ctx, q, userID, parentID, rootName).Scan(&rootFolderID)
+	err = tx.QueryRowContext(ctx, qGetFolderByPath, userID, parentID, rootName).Scan(&rootFolderID)
 	if err == sql.ErrNoRows {
-		err = tx.QueryRowContext(ctx, `
-            INSERT INTO folders (id, user_id, parent_id, name, created_at, updated_at)
-            VALUES (gen_random_uuid(), $1, NULLIF($2,'')::uuid, $3, now(), now())
-            RETURNING id
-        `, userID, parentID, rootName).Scan(&rootFolderID)
+		err = tx.QueryRowContext(ctx, qInsertFolder, userID, parentID, rootName).Scan(&rootFolderID)
 		if err != nil {
 			return FolderInitResponse{}, err
 		}
@@ -95,8 +90,8 @@ func (s *service) FolderInit(ctx context.Context, userID, parentID, rootName str
 						}
 						pid := folderMap[pp]
 						var fid string
-						if err := tx.QueryRowContext(ctx, `SELECT id FROM folders WHERE user_id=$1 AND parent_id=$2 AND name=$3 AND deleted_at IS NULL LIMIT 1`, userID, pid, name).Scan(&fid); err == sql.ErrNoRows {
-							if err := tx.QueryRowContext(ctx, `INSERT INTO folders (id, user_id, parent_id, name, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, now(), now()) RETURNING id`, userID, pid, name).Scan(&fid); err != nil {
+						if err := tx.QueryRowContext(ctx, qGetFolderByPath, userID, pid, name).Scan(&fid); err == sql.ErrNoRows {
+							if err := tx.QueryRowContext(ctx, qInsertFolder, userID, pid, name).Scan(&fid); err != nil {
 								return "", err
 							}
 						} else if err != nil {
@@ -126,8 +121,8 @@ func (s *service) FolderInit(ctx context.Context, userID, parentID, rootName str
 				}
 				pid := folderMap[pp]
 				var fid string
-				if err := tx.QueryRowContext(ctx, `SELECT id FROM folders WHERE user_id=$1 AND parent_id=$2 AND name=$3 AND deleted_at IS NULL LIMIT 1`, userID, pid, name).Scan(&fid); err == sql.ErrNoRows {
-					if err := tx.QueryRowContext(ctx, `INSERT INTO folders (id, user_id, parent_id, name, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, now(), now()) RETURNING id`, userID, pid, name).Scan(&fid); err != nil {
+				if err := tx.QueryRowContext(ctx, qGetFolderByPath, userID, pid, name).Scan(&fid); err == sql.ErrNoRows {
+					if err := tx.QueryRowContext(ctx, qInsertFolder, userID, pid, name).Scan(&fid); err != nil {
 						return "", err
 					}
 				} else if err != nil {
@@ -193,18 +188,14 @@ func (s *service) FolderInit(ctx context.Context, userID, parentID, rootName str
 		if f.SHA256 != "" {
 			var contentID string
 			var sizeBytes int64
-			err := tx.QueryRowContext(ctx, "SELECT id, size_bytes FROM file_contents WHERE content_hash=$1 LIMIT 1", f.SHA256).Scan(&contentID, &sizeBytes)
+			err := tx.QueryRowContext(ctx, qCheckContentExists, f.SHA256).Scan(&contentID, &sizeBytes)
 			if err == nil {
 				var newUserFileID string
-				err = tx.QueryRowContext(ctx, `
-                    INSERT INTO user_files (id, user_id, content_id, filename, declared_mime, original_size_bytes, folder_id, created_at, updated_at)
-                    VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, now(), now())
-                    RETURNING id
-                `, userID, contentID, name, f.Mime, f.Size, targetFID).Scan(&newUserFileID)
+				err = tx.QueryRowContext(ctx, qInsertExistingFileRef, userID, contentID, name, f.Mime, f.Size, targetFID).Scan(&newUserFileID)
 				if err != nil {
 					return FolderInitResponse{}, err
 				}
-				if _, err := tx.ExecContext(ctx, "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id=$1", contentID); err != nil {
+				if _, err := tx.ExecContext(ctx, qIncRefCount, contentID); err != nil {
 					return FolderInitResponse{}, err
 				}
 				responses = append(responses, FolderInitFileResponse{Path: f.Path, Deduped: true, UserFileID: newUserFileID})
@@ -251,7 +242,7 @@ func (s *service) CreateSession(ctx context.Context, userID string, req CreateSe
 	if req.ClientSha256 != "" {
 		var contentID string
 		var sizeBytes int64
-		err := s.db.QueryRowContext(ctx, "SELECT id, size_bytes FROM file_contents WHERE content_hash=$1 LIMIT 1", req.ClientSha256).Scan(&contentID, &sizeBytes)
+		err := s.db.QueryRowContext(ctx, qCheckContentExists, req.ClientSha256).Scan(&contentID, &sizeBytes)
 		if err == nil {
 			tx, txErr := s.db.BeginTx(ctx, nil)
 			if txErr != nil {
@@ -259,15 +250,11 @@ func (s *service) CreateSession(ctx context.Context, userID string, req CreateSe
 			}
 			defer tx.Rollback()
 			var newUserFileID string
-			err = tx.QueryRowContext(ctx, `
-                INSERT INTO user_files (id, user_id, content_id, filename, declared_mime, original_size_bytes, created_at, updated_at)
-                VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, now(), now())
-                RETURNING id
-            `, userID, contentID, req.Filename, req.DeclaredMime, req.OriginalSize).Scan(&newUserFileID)
+			err = tx.QueryRowContext(ctx, qInsertExistingFileRef, userID, contentID, req.Filename, req.DeclaredMime, req.OriginalSize, "").Scan(&newUserFileID)
 			if err != nil {
 				return CreateSessionResponse{}, err
 			}
-			if _, err := tx.ExecContext(ctx, "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id=$1", contentID); err != nil {
+			if _, err := tx.ExecContext(ctx, qIncRefCount, contentID); err != nil {
 				return CreateSessionResponse{}, err
 			}
 			if err := tx.Commit(); err != nil {
@@ -283,10 +270,7 @@ func (s *service) CreateSession(ctx context.Context, userID string, req CreateSe
 	if err != nil {
 		return CreateSessionResponse{}, err
 	}
-	_, err = s.db.ExecContext(ctx, `
-        INSERT INTO upload_sessions (id, user_id, filename, declared_mime, original_size_bytes, temp_blob_key, client_sha256, status, created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,'OPEN',now(),now())
-    `, sessionID, userID, req.Filename, req.DeclaredMime, req.OriginalSize, tempName, req.ClientSha256)
+	_, err = s.db.ExecContext(ctx, qInsertUploadSession, sessionID, userID, req.Filename, req.DeclaredMime, req.OriginalSize, tempName, req.ClientSha256)
 	if err != nil {
 		return CreateSessionResponse{}, err
 	}
@@ -300,7 +284,7 @@ func (s *service) Complete(ctx context.Context, userID string, req CompleteReque
 
 	var tempKey, filename, declaredMime, clientSha, status string
 	var originalSize int64
-	err := s.db.QueryRowContext(ctx, "SELECT temp_blob_key, filename, declared_mime, original_size_bytes, status, client_sha256 FROM upload_sessions WHERE id=$1", req.SessionId).Scan(&tempKey, &filename, &declaredMime, &originalSize, &status, &clientSha)
+	err := s.db.QueryRowContext(ctx, qGetUploadSession, req.SessionId).Scan(&tempKey, &filename, &declaredMime, &originalSize, &status, &clientSha)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return CompleteResponse{}, ErrNotFound
@@ -353,21 +337,17 @@ func (s *service) Complete(ctx context.Context, userID string, req CompleteReque
 	defer tx.Rollback()
 
 	var contentID string
-	err = tx.QueryRowContext(ctx, "SELECT id FROM file_contents WHERE content_hash=$1 LIMIT 1", sha).Scan(&contentID)
+	err = tx.QueryRowContext(ctx, qCheckContentExists, sha).Scan(&contentID)
 	if err == nil {
 		var newUserFileID string
-		err = tx.QueryRowContext(ctx, `
-            INSERT INTO user_files (id, user_id, content_id, filename, declared_mime, original_size_bytes, folder_id, created_at, updated_at)
-            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NULLIF($6,'')::uuid, now(), now())
-            RETURNING id
-        `, userID, contentID, filename, declaredMime, originalSize, req.FolderID).Scan(&newUserFileID)
+		err = tx.QueryRowContext(ctx, qInsertUserFile, userID, contentID, filename, declaredMime, originalSize, req.FolderID).Scan(&newUserFileID)
 		if err != nil {
 			return CompleteResponse{}, err
 		}
-		if _, err := tx.ExecContext(ctx, "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id=$1", contentID); err != nil {
+		if _, err := tx.ExecContext(ctx, qIncRefCount, contentID); err != nil {
 			return CompleteResponse{}, err
 		}
-		_, _ = tx.ExecContext(ctx, "UPDATE upload_sessions SET status='COMPLETED', client_sha256=$2, updated_at=now() WHERE id=$1", req.SessionId, sha)
+		_, _ = tx.ExecContext(ctx, qUpdateSessionCompleted, req.SessionId, sha)
 		if err := tx.Commit(); err != nil {
 			return CompleteResponse{}, err
 		}
@@ -391,33 +371,25 @@ func (s *service) Complete(ctx context.Context, userID string, req CompleteReque
 	}
 
 	var newContentID string
-	err = tx.QueryRowContext(ctx, `
-        INSERT INTO file_contents (id, content_hash, blob_key, size_bytes, mime_type, ref_count, created_at)
-        VALUES (gen_random_uuid(), $1, $2, $3, $4, 1, now())
-        RETURNING id
-    `, sha, finalKey, originalSize, declaredMime).Scan(&newContentID)
+	err = tx.QueryRowContext(ctx, qInsertFileContent, sha, finalKey, originalSize, declaredMime).Scan(&newContentID)
 	if err != nil {
 		logger.L.Warn("insert file_contents failed, fallback to select", zap.Error(err))
-		err2 := tx.QueryRowContext(ctx, "SELECT id FROM file_contents WHERE content_hash=$1 LIMIT 1", sha).Scan(&newContentID)
+		err2 := tx.QueryRowContext(ctx, qCheckContentExists, sha).Scan(&newContentID)
 		if err2 != nil {
 			return CompleteResponse{}, err2
 		}
-		if _, err := tx.ExecContext(ctx, "UPDATE file_contents SET ref_count = ref_count + 1 WHERE id=$1", newContentID); err != nil {
+		if _, err := tx.ExecContext(ctx, qIncRefCount, newContentID); err != nil {
 			return CompleteResponse{}, err
 		}
 	}
 
 	var newUserFileID string
-	err = tx.QueryRowContext(ctx, `
-        INSERT INTO user_files (id, user_id, content_id, filename, declared_mime, original_size_bytes, folder_id, created_at, updated_at)
-        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NULLIF($6,'')::uuid, now(), now())
-        RETURNING id
-    `, userID, newContentID, filename, declaredMime, originalSize, req.FolderID).Scan(&newUserFileID)
+	err = tx.QueryRowContext(ctx, qInsertUserFile, userID, newContentID, filename, declaredMime, originalSize, req.FolderID).Scan(&newUserFileID)
 	if err != nil {
 		return CompleteResponse{}, err
 	}
 
-	_, _ = tx.ExecContext(ctx, "UPDATE upload_sessions SET status='COMPLETED', client_sha256=$2, updated_at=now() WHERE id=$1", req.SessionId, sha)
+	_, _ = tx.ExecContext(ctx, qUpdateSessionCompleted, req.SessionId, sha)
 	_ = audit.Log(ctx, s.db, userID, "upload", "file", newUserFileID, map[string]interface{}{"filename": filename, "size": originalSize, "sha256": sha})
 
 	if err := tx.Commit(); err != nil {
@@ -434,7 +406,7 @@ func (s *service) Abort(ctx context.Context, userID, sessionID string) error {
 		return ErrUnauthorized
 	}
 	var tempKey string
-	err := s.db.QueryRowContext(ctx, "SELECT temp_blob_key FROM upload_sessions WHERE id=$1 AND user_id=$2", sessionID, userID).Scan(&tempKey)
+	err := s.db.QueryRowContext(ctx, qGetSessionForAbort, sessionID, userID).Scan(&tempKey)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return ErrNotFound
@@ -445,21 +417,17 @@ func (s *service) Abort(ctx context.Context, userID, sessionID string) error {
 	if err != nil {
 		logger.L.Warn("remove temp object failed", zap.Error(err))
 	}
-	_, _ = s.db.ExecContext(ctx, "UPDATE upload_sessions SET status='ABORTED', updated_at=now() WHERE id=$1", sessionID)
+	_, _ = s.db.ExecContext(ctx, qUpdateSessionAborted, sessionID)
 	return nil
 }
 
 func (s *service) getUsageAndQuota(ctx context.Context, userID string) (int64, int64, error) {
 	var used int64
-	if err := s.db.QueryRowContext(ctx, `
-        SELECT COALESCE(SUM(original_size_bytes),0)
-        FROM user_files
-        WHERE user_id=$1 AND deleted_at IS NULL
-    `, userID).Scan(&used); err != nil {
+	if err := s.db.QueryRowContext(ctx, qGetUsedStorage, userID).Scan(&used); err != nil {
 		return 0, 0, err
 	}
 	var quota int64
-	if err := s.db.QueryRowContext(ctx, "SELECT quota_bytes FROM users WHERE id=$1", userID).Scan(&quota); err != nil {
+	if err := s.db.QueryRowContext(ctx, qGetUserQuota, userID).Scan(&quota); err != nil {
 		return 0, 0, err
 	}
 	return used, quota, nil

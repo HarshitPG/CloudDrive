@@ -253,7 +253,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_rest.forgotRequest"
+                            "$ref": "#/definitions/internal_api_rest.forgotRequest"
                         }
                     }
                 ],
@@ -261,7 +261,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.forgotPasswordResponse"
+                            "$ref": "#/definitions/internal_api_rest.forgotPasswordResponse"
                         }
                     }
                 }
@@ -286,7 +286,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_rest.loginRequest"
+                            "$ref": "#/definitions/internal_api_rest.loginRequest"
                         }
                     }
                 ],
@@ -294,19 +294,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.loginResponse"
+                            "$ref": "#/definitions/internal_api_rest.loginResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     }
                 }
@@ -330,7 +330,7 @@ const docTemplate = `{
                         "name": "body",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.logoutRequest"
+                            "$ref": "#/definitions/internal_api_rest.logoutRequest"
                         }
                     }
                 ],
@@ -338,7 +338,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.logoutResponse"
+                            "$ref": "#/definitions/internal_api_rest.logoutResponse"
                         }
                     }
                 }
@@ -362,7 +362,7 @@ const docTemplate = `{
                         "name": "body",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.refreshRequest"
+                            "$ref": "#/definitions/internal_api_rest.refreshRequest"
                         }
                     }
                 ],
@@ -370,19 +370,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.refreshResponse"
+                            "$ref": "#/definitions/internal_api_rest.refreshResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     }
                 }
@@ -407,7 +407,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_rest.resetRequest"
+                            "$ref": "#/definitions/internal_api_rest.resetRequest"
                         }
                     }
                 ],
@@ -415,13 +415,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.resetPasswordResponse"
+                            "$ref": "#/definitions/internal_api_rest.resetPasswordResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     }
                 }
@@ -447,7 +447,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_rest.signupRequest"
+                            "$ref": "#/definitions/internal_api_rest.signupRequest"
                         }
                     }
                 ],
@@ -455,13 +455,13 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.signupResponse"
+                            "$ref": "#/definitions/internal_api_rest.signupResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     }
                 }
@@ -489,13 +489,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.verifyResponse"
+                            "$ref": "#/definitions/internal_api_rest.verifyResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     }
                 }
@@ -537,7 +537,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Files list response",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.fileListResponse"
+                            "$ref": "#/definitions/internal_api_rest.fileListResponse"
                         }
                     },
                     "500": {
@@ -642,13 +642,13 @@ const docTemplate = `{
                     "200": {
                         "description": "Delete confirmation",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.messageResponse"
+                            "$ref": "#/definitions/internal_api_rest.messageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     }
                 }
@@ -684,7 +684,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_rest.patchRequest"
+                            "$ref": "#/definitions/internal_api_rest.patchRequest"
                         }
                     }
                 ],
@@ -692,13 +692,13 @@ const docTemplate = `{
                     "200": {
                         "description": "Update confirmation",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.messageResponse"
+                            "$ref": "#/definitions/internal_api_rest.messageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     }
                 }
@@ -735,19 +735,19 @@ const docTemplate = `{
                     "200": {
                         "description": "Download URL response",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.downloadURLResponse"
+                            "$ref": "#/definitions/internal_api_rest.downloadURLResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     },
                     "404": {
                         "description": "File not found",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     }
                 }
@@ -785,7 +785,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_rest.moveRequest"
+                            "$ref": "#/definitions/internal_api_rest.moveRequest"
                         }
                     }
                 ],
@@ -793,13 +793,13 @@ const docTemplate = `{
                     "200": {
                         "description": "Move confirmation",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.messageResponse"
+                            "$ref": "#/definitions/internal_api_rest.messageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     }
                 }
@@ -836,13 +836,13 @@ const docTemplate = `{
                     "200": {
                         "description": "Restore confirmation",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.messageResponse"
+                            "$ref": "#/definitions/internal_api_rest.messageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     }
                 }
@@ -879,7 +879,7 @@ const docTemplate = `{
                     "200": {
                         "description": "File versions list",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.fileVersionsResponse"
+                            "$ref": "#/definitions/internal_api_rest.fileVersionsResponse"
                         }
                     },
                     "500": {
@@ -941,7 +941,114 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/folder-shares": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a folder share with advanced options (recursive, snapshot mode, etc.)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Create advanced folder share",
+                "parameters": [
+                    {
+                        "description": "Folder share configuration",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Folder share created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Not the folder owner",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Folder not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/folder-shares/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get detailed information about a folder share (creator only)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Get folder share info",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Folder share ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Share details",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Not the share creator",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Share not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -1034,7 +1141,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_rest.createFolderRequest"
+                            "$ref": "#/definitions/internal_api_rest.createFolderRequest"
                         }
                     }
                 ],
@@ -1161,7 +1268,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_rest.renameFolderRequest"
+                            "$ref": "#/definitions/internal_api_rest.renameFolderRequest"
                         }
                     }
                 ],
@@ -1508,7 +1615,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_rest.moveFolderRequest"
+                            "$ref": "#/definitions/internal_api_rest.moveFolderRequest"
                         }
                     }
                 ],
@@ -1618,6 +1725,280 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/fs/{token}": {
+            "get": {
+                "description": "Get details and contents of a publicly shared folder using share token",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Resolve public folder share",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Folder share token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Folder share details with items",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Share not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "410": {
+                        "description": "Share expired",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/fs/{token}/ancestors": {
+            "get": {
+                "description": "Get the ancestor folders (breadcrumb path) for a folder within a share",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Get folder share ancestors",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Folder share token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Folder ID to get ancestors for",
+                        "name": "folderId",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of ancestor folders",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Share not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "410": {
+                        "description": "Share expired",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/fs/{token}/contents": {
+            "get": {
+                "description": "Get the contents of a specific folder within a folder share",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Get folder share contents",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Folder share token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Specific folder ID to list (defaults to root shared folder)",
+                        "name": "folderId",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Folder contents",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Share not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "410": {
+                        "description": "Share expired",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/fs/{token}/download": {
+            "get": {
+                "description": "Download all files in a folder share as a ZIP archive",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/zip"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Download folder share as ZIP archive",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Folder share token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ZIP archive of folder contents",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "Share not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "410": {
+                        "description": "Share expired",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/fs/{token}/download/{fileId}": {
+            "get": {
+                "description": "Get a download URL for a specific file within a folder share",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Download file from folder share",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Folder share token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File ID to download",
+                        "name": "fileId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Download URL and file info",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "File not accessible through this share",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Share or file not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "410": {
+                        "description": "Share expired",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/graphql": {
             "post": {
                 "security": [
@@ -1643,7 +2024,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/server.GraphQLRequest"
+                            "$ref": "#/definitions/internal_server.GraphQLRequest"
                         }
                     }
                 ],
@@ -1651,7 +2032,54 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/server.GraphQLResponse"
+                            "$ref": "#/definitions/internal_server.GraphQLResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/s/{token}": {
+            "get": {
+                "description": "Get details of a publicly shared file using share token",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Resolve public file share",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Share token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Share details with download URL",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Share not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "410": {
+                        "description": "Share expired",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -1720,19 +2148,568 @@ const docTemplate = `{
                     "200": {
                         "description": "Search results with files array and metadata",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.searchFilesResponse"
+                            "$ref": "#/definitions/internal_api_rest.searchFilesResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/shares/files/{id}/download": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get download URL for a file shared with the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Download shared file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Download URL",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Access denied",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/shares/files/{id}/share": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a public share link for a file",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Create public file share",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Share options (title, description, expiresAt)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Share created with token and URL",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Not the file owner",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/shares/files/{id}/share/user": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Share a file with a specific user by email with specified permissions",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Share file with specific user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Target user email and permission (read/write)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Share created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Not the file owner",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "File or target user not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/shares/files/{id}/shares": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List all shares (public and user-specific) for a file",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "List file shares",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of public and user shares",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Not the file owner",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/shares/folders/{id}/ancestors": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get the parent folder hierarchy for a folder shared with the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "List ancestors of shared folder",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Folder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of ancestor folders",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Access denied",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Folder not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/shares/folders/{id}/contents": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List files and subfolders in a folder shared with the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "List contents of shared folder",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Folder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Folder contents",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Access denied",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Folder not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/shares/folders/{id}/share": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a public share link for a folder",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Create public folder share",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Folder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Share options (title, description, expiresAt)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Share created with token and URL",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Not the folder owner",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Folder not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/shares/folders/{id}/share/user": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Share a folder with a specific user by email with specified permissions",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Share folder with specific user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Folder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Target user email and permission (read/write)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Share created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Not the folder owner",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Folder or target user not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/shares/shared-with-me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get all files and folders that have been shared with the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "List items shared with me",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Number of items per page (default 50)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Pagination offset (default 0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of shared files and folders",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/shares/shares/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Revoke a file or folder share (creator only)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Revoke share",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Share ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Share revoked",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Not the share creator",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Share not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -1763,7 +2740,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_rest.abortRequest"
+                            "$ref": "#/definitions/internal_api_rest.abortRequest"
                         }
                     }
                 ],
@@ -1771,7 +2748,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Upload aborted successfully",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.abortResponse"
+                            "$ref": "#/definitions/internal_api_rest.abortResponse"
                         }
                     },
                     "400": {
@@ -1838,7 +2815,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_rest.completeRequest"
+                            "$ref": "#/definitions/internal_api_rest.completeRequest"
                         }
                     }
                 ],
@@ -1923,7 +2900,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_rest.FolderInitRequest"
+                            "$ref": "#/definitions/internal_api_rest.FolderInitRequest"
                         }
                     }
                 ],
@@ -1931,7 +2908,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Upload session initialized",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.FolderInitResponse"
+                            "$ref": "#/definitions/internal_api_rest.FolderInitResponse"
                         }
                     },
                     "400": {
@@ -1998,7 +2975,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_rest.createSessionRequest"
+                            "$ref": "#/definitions/internal_api_rest.createSessionRequest"
                         }
                     }
                 ],
@@ -2006,13 +2983,13 @@ const docTemplate = `{
                     "200": {
                         "description": "File already exists (skip upload)",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.createSessionResponse"
+                            "$ref": "#/definitions/internal_api_rest.createSessionResponse"
                         }
                     },
                     "201": {
                         "description": "Upload session created",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.createSessionResponse"
+                            "$ref": "#/definitions/internal_api_rest.createSessionResponse"
                         }
                     },
                     "400": {
@@ -2073,19 +3050,19 @@ const docTemplate = `{
                     "200": {
                         "description": "Quota usage details",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.quotaUsageResponse"
+                            "$ref": "#/definitions/internal_api_rest.quotaUsageResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     }
                 }
@@ -2134,31 +3111,31 @@ const docTemplate = `{
                     "200": {
                         "description": "Quota updated successfully",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.messageResponse"
+                            "$ref": "#/definitions/internal_api_rest.messageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     },
                     "403": {
                         "description": "Admin access required",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/api_rest.errorResponse"
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     }
                 }
@@ -2189,7 +3166,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Example server message (for documentation only)",
                         "schema": {
-                            "$ref": "#/definitions/server.WSMessage"
+                            "$ref": "#/definitions/internal_server.WSMessage"
                         }
                     }
                 }
@@ -2197,479 +3174,6 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "api_rest.FolderInitFile": {
-            "type": "object",
-            "properties": {
-                "mime": {
-                    "type": "string"
-                },
-                "path": {
-                    "type": "string"
-                },
-                "sha256": {
-                    "type": "string"
-                },
-                "size": {
-                    "type": "integer"
-                }
-            }
-        },
-        "api_rest.FolderInitRequest": {
-            "type": "object",
-            "required": [
-                "files",
-                "rootName"
-            ],
-            "properties": {
-                "files": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/api_rest.FolderInitFile"
-                    }
-                },
-                "idempotencyKey": {
-                    "type": "string"
-                },
-                "parentId": {
-                    "type": "string"
-                },
-                "rootName": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.FolderInitResponse": {
-            "type": "object",
-            "properties": {
-                "files": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/uploads.FolderInitFileResponse"
-                    }
-                },
-                "folders": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "rootFolderId": {
-                    "type": "string"
-                },
-                "uploadId": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.abortRequest": {
-            "type": "object",
-            "required": [
-                "sessionId"
-            ],
-            "properties": {
-                "sessionId": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.abortResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string",
-                    "example": "aborted"
-                }
-            }
-        },
-        "api_rest.completeRequest": {
-            "type": "object",
-            "properties": {
-                "clientSha256": {
-                    "type": "string"
-                },
-                "folderId": {
-                    "type": "string"
-                },
-                "sessionId": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.createFolderRequest": {
-            "type": "object",
-            "required": [
-                "name"
-            ],
-            "properties": {
-                "name": {
-                    "type": "string"
-                },
-                "parentId": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.createSessionRequest": {
-            "type": "object",
-            "properties": {
-                "clientSha256": {
-                    "type": "string"
-                },
-                "declaredMime": {
-                    "type": "string"
-                },
-                "filename": {
-                    "type": "string"
-                },
-                "originalSize": {
-                    "type": "integer"
-                }
-            }
-        },
-        "api_rest.createSessionResponse": {
-            "type": "object",
-            "properties": {
-                "existingFileId": {
-                    "type": "string"
-                },
-                "sessionId": {
-                    "type": "string"
-                },
-                "skipUpload": {
-                    "type": "boolean"
-                },
-                "tempBlobKey": {
-                    "type": "string"
-                },
-                "uploadUrl": {
-                    "type": "string"
-                },
-                "userFileId": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.downloadURLResponse": {
-            "type": "object",
-            "properties": {
-                "downloadUrl": {
-                    "type": "string",
-                    "example": "https://storage.example.com/files/abc123.pdf"
-                }
-            }
-        },
-        "api_rest.errorResponse": {
-            "type": "object",
-            "properties": {
-                "error": {
-                    "type": "string",
-                    "example": "invalid request"
-                }
-            }
-        },
-        "api_rest.fileListResponse": {
-            "type": "object",
-            "properties": {
-                "files": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/backend_internal_files.FileListItem"
-                    }
-                }
-            }
-        },
-        "api_rest.fileVersionsResponse": {
-            "type": "object",
-            "properties": {
-                "versions": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/backend_internal_files.FileVersion"
-                    }
-                }
-            }
-        },
-        "api_rest.forgotPasswordResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string",
-                    "example": "if the email exists, a reset link was sent"
-                }
-            }
-        },
-        "api_rest.forgotRequest": {
-            "type": "object",
-            "required": [
-                "email"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.loginRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "password"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "password": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.loginResponse": {
-            "type": "object",
-            "properties": {
-                "access_token": {
-                    "type": "string",
-                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                }
-            }
-        },
-        "api_rest.logoutRequest": {
-            "type": "object",
-            "properties": {
-                "refresh_token": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.logoutResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string",
-                    "example": "logged out"
-                }
-            }
-        },
-        "api_rest.messageResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string",
-                    "example": "operation completed successfully"
-                }
-            }
-        },
-        "api_rest.moveFolderRequest": {
-            "type": "object",
-            "properties": {
-                "targetParentId": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.moveRequest": {
-            "type": "object",
-            "properties": {
-                "targetFolderId": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.patchRequest": {
-            "type": "object",
-            "properties": {
-                "filename": {
-                    "type": "string"
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "api_rest.quotaUsageResponse": {
-            "type": "object",
-            "properties": {
-                "deduped_bytes": {
-                    "type": "integer"
-                },
-                "original_bytes": {
-                    "type": "integer"
-                },
-                "quota_bytes": {
-                    "type": "integer"
-                },
-                "quota_used_percent": {
-                    "type": "number"
-                },
-                "savings_bytes": {
-                    "type": "integer"
-                },
-                "savings_percent": {
-                    "type": "number"
-                }
-            }
-        },
-        "api_rest.refreshRequest": {
-            "type": "object",
-            "properties": {
-                "refresh_token": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.refreshResponse": {
-            "type": "object",
-            "properties": {
-                "access_token": {
-                    "type": "string",
-                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                }
-            }
-        },
-        "api_rest.renameFolderRequest": {
-            "type": "object",
-            "required": [
-                "name"
-            ],
-            "properties": {
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.resetPasswordResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string",
-                    "example": "password reset successful"
-                }
-            }
-        },
-        "api_rest.resetRequest": {
-            "type": "object",
-            "required": [
-                "newPassword",
-                "token"
-            ],
-            "properties": {
-                "newPassword": {
-                    "type": "string",
-                    "minLength": 6
-                },
-                "token": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.searchFileItem": {
-            "type": "object",
-            "properties": {
-                "contentHash": {
-                    "type": "string"
-                },
-                "createdAt": {
-                    "type": "string"
-                },
-                "dedupSavings": {
-                    "type": "integer"
-                },
-                "downloadCount": {
-                    "type": "integer"
-                },
-                "filename": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "mime": {
-                    "type": "string"
-                },
-                "physicalSize": {
-                    "type": "integer"
-                },
-                "rank": {
-                    "type": "number"
-                },
-                "refCount": {
-                    "type": "integer"
-                },
-                "size": {
-                    "type": "integer"
-                },
-                "updatedAt": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_rest.searchFilesResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/api_rest.searchFileItem"
-                    }
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "offset": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
-        "api_rest.signupRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "password"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "fullName": {
-                    "type": "string"
-                },
-                "password": {
-                    "type": "string",
-                    "minLength": 6
-                }
-            }
-        },
-        "api_rest.signupResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string",
-                    "example": "user created"
-                },
-                "verification_token": {
-                    "type": "string",
-                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                }
-            }
-        },
-        "api_rest.verifyResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string",
-                    "example": "email verified"
-                }
-            }
-        },
         "backend_internal_files.FileListItem": {
             "type": "object",
             "properties": {
@@ -2766,49 +3270,7 @@ const docTemplate = `{
                 }
             }
         },
-        "server.GraphQLRequest": {
-            "type": "object",
-            "properties": {
-                "operationName": {
-                    "type": "string"
-                },
-                "query": {
-                    "type": "string"
-                },
-                "variables": {
-                    "type": "object",
-                    "additionalProperties": true
-                }
-            }
-        },
-        "server.GraphQLResponse": {
-            "type": "object",
-            "properties": {
-                "data": {},
-                "errors": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "additionalProperties": true
-                    }
-                }
-            }
-        },
-        "server.WSMessage": {
-            "type": "object",
-            "properties": {
-                "downloadCount": {
-                    "type": "integer"
-                },
-                "fileId": {
-                    "type": "string"
-                },
-                "ts": {
-                    "type": "integer"
-                }
-            }
-        },
-        "uploads.FolderInitFileResponse": {
+        "backend_internal_uploads.FolderInitFileResponse": {
             "type": "object",
             "properties": {
                 "deduped": {
@@ -2831,6 +3293,521 @@ const docTemplate = `{
                 },
                 "userFileId": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.FolderInitFile": {
+            "type": "object",
+            "properties": {
+                "mime": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "sha256": {
+                    "type": "string"
+                },
+                "size": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_api_rest.FolderInitRequest": {
+            "type": "object",
+            "required": [
+                "files",
+                "rootName"
+            ],
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_api_rest.FolderInitFile"
+                    }
+                },
+                "idempotencyKey": {
+                    "type": "string"
+                },
+                "parentId": {
+                    "type": "string"
+                },
+                "rootName": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.FolderInitResponse": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backend_internal_uploads.FolderInitFileResponse"
+                    }
+                },
+                "folders": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "rootFolderId": {
+                    "type": "string"
+                },
+                "uploadId": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.abortRequest": {
+            "type": "object",
+            "required": [
+                "sessionId"
+            ],
+            "properties": {
+                "sessionId": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.abortResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "aborted"
+                }
+            }
+        },
+        "internal_api_rest.completeRequest": {
+            "type": "object",
+            "properties": {
+                "clientSha256": {
+                    "type": "string"
+                },
+                "folderId": {
+                    "type": "string"
+                },
+                "sessionId": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.createFolderRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "parentId": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.createSessionRequest": {
+            "type": "object",
+            "properties": {
+                "clientSha256": {
+                    "type": "string"
+                },
+                "declaredMime": {
+                    "type": "string"
+                },
+                "filename": {
+                    "type": "string"
+                },
+                "originalSize": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_api_rest.createSessionResponse": {
+            "type": "object",
+            "properties": {
+                "existingFileId": {
+                    "type": "string"
+                },
+                "sessionId": {
+                    "type": "string"
+                },
+                "skipUpload": {
+                    "type": "boolean"
+                },
+                "tempBlobKey": {
+                    "type": "string"
+                },
+                "uploadUrl": {
+                    "type": "string"
+                },
+                "userFileId": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.downloadURLResponse": {
+            "type": "object",
+            "properties": {
+                "downloadUrl": {
+                    "type": "string",
+                    "example": "https://storage.example.com/files/abc123.pdf"
+                }
+            }
+        },
+        "internal_api_rest.errorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "invalid request"
+                }
+            }
+        },
+        "internal_api_rest.fileListResponse": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backend_internal_files.FileListItem"
+                    }
+                }
+            }
+        },
+        "internal_api_rest.fileVersionsResponse": {
+            "type": "object",
+            "properties": {
+                "versions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backend_internal_files.FileVersion"
+                    }
+                }
+            }
+        },
+        "internal_api_rest.forgotPasswordResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "if the email exists, a reset link was sent"
+                }
+            }
+        },
+        "internal_api_rest.forgotRequest": {
+            "type": "object",
+            "required": [
+                "email"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.loginRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "password"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.loginResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string",
+                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                }
+            }
+        },
+        "internal_api_rest.logoutRequest": {
+            "type": "object",
+            "properties": {
+                "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.logoutResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "logged out"
+                }
+            }
+        },
+        "internal_api_rest.messageResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "operation completed successfully"
+                }
+            }
+        },
+        "internal_api_rest.moveFolderRequest": {
+            "type": "object",
+            "properties": {
+                "targetParentId": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.moveRequest": {
+            "type": "object",
+            "properties": {
+                "targetFolderId": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.patchRequest": {
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "internal_api_rest.quotaUsageResponse": {
+            "type": "object",
+            "properties": {
+                "deduped_bytes": {
+                    "type": "integer"
+                },
+                "original_bytes": {
+                    "type": "integer"
+                },
+                "quota_bytes": {
+                    "type": "integer"
+                },
+                "quota_used_percent": {
+                    "type": "number"
+                },
+                "savings_bytes": {
+                    "type": "integer"
+                },
+                "savings_percent": {
+                    "type": "number"
+                }
+            }
+        },
+        "internal_api_rest.refreshRequest": {
+            "type": "object",
+            "properties": {
+                "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.refreshResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string",
+                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                }
+            }
+        },
+        "internal_api_rest.renameFolderRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.resetPasswordResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "password reset successful"
+                }
+            }
+        },
+        "internal_api_rest.resetRequest": {
+            "type": "object",
+            "required": [
+                "newPassword",
+                "token"
+            ],
+            "properties": {
+                "newPassword": {
+                    "type": "string",
+                    "minLength": 6
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.searchFileItem": {
+            "type": "object",
+            "properties": {
+                "contentHash": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "dedupSavings": {
+                    "type": "integer"
+                },
+                "downloadCount": {
+                    "type": "integer"
+                },
+                "filename": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "mime": {
+                    "type": "string"
+                },
+                "physicalSize": {
+                    "type": "integer"
+                },
+                "rank": {
+                    "type": "number"
+                },
+                "refCount": {
+                    "type": "integer"
+                },
+                "size": {
+                    "type": "integer"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_rest.searchFilesResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_api_rest.searchFileItem"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_api_rest.signupRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "password"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "fullName": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string",
+                    "minLength": 6
+                }
+            }
+        },
+        "internal_api_rest.signupResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "user created"
+                },
+                "verification_token": {
+                    "type": "string",
+                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                }
+            }
+        },
+        "internal_api_rest.verifyResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "email verified"
+                }
+            }
+        },
+        "internal_server.GraphQLRequest": {
+            "type": "object",
+            "properties": {
+                "operationName": {
+                    "type": "string"
+                },
+                "query": {
+                    "type": "string"
+                },
+                "variables": {
+                    "type": "object",
+                    "additionalProperties": true
+                }
+            }
+        },
+        "internal_server.GraphQLResponse": {
+            "type": "object",
+            "properties": {
+                "data": {},
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                    }
+                }
+            }
+        },
+        "internal_server.WSMessage": {
+            "type": "object",
+            "properties": {
+                "downloadCount": {
+                    "type": "integer"
+                },
+                "fileId": {
+                    "type": "string"
+                },
+                "ts": {
+                    "type": "integer"
                 }
             }
         }

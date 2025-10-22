@@ -38,6 +38,7 @@ WHERE uf.id=$1 AND `
 	qIncRefCount         = `UPDATE file_contents SET ref_count = ref_count + 1 WHERE id=$1`
 	qEnableShares        = `UPDATE shares SET revoked=false WHERE target_type='file' AND target_id=$1`
 	qSelectFolderForFile = `SELECT folder_id FROM user_files WHERE id=$1`
+	qCheckSoftDeleted    = `SELECT user_id, content_id FROM user_files WHERE id=$1 AND deleted_at IS NOT NULL`
 
 	qSelectOwnerActive = `SELECT user_id FROM user_files WHERE id=$1 AND deleted_at IS NULL`
 	qUpdateFilename    = `UPDATE user_files SET filename=$1, updated_at=now() WHERE id=$2`

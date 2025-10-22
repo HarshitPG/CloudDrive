@@ -24,7 +24,7 @@ func AdminOnly(db *sql.DB) gin.HandlerFunc {
 		defer cancel()
 
 		var isAdmin bool
-		err := db.QueryRowContext(ctx, "SELECT is_admin FROM users WHERE id=$1", userID).Scan(&isAdmin)
+		err := db.QueryRowContext(ctx, qCheckAdminRole, userID).Scan(&isAdmin)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				logger.L.Warn("admin check user missing", zap.String("userID", userID))

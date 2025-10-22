@@ -146,7 +146,7 @@ func (s *service) Delete(ctx context.Context, userID, fileID string, permanent b
 
 func (s *service) Restore(ctx context.Context, userID, fileID string) (string, error) {
 	var owner, contentID string
-	if err := s.db.QueryRowContext(ctx, "SELECT user_id, content_id FROM user_files WHERE id=$1 AND deleted_at IS NOT NULL", fileID).Scan(&owner, &contentID); err != nil {
+	if err := s.db.QueryRowContext(ctx, qCheckSoftDeleted, fileID).Scan(&owner, &contentID); err != nil {
 		if err == sql.ErrNoRows {
 			return "", perr.ErrNotFound
 		}

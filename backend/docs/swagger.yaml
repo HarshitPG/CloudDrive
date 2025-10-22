@@ -1,315 +1,5 @@
 basePath: /
 definitions:
-  api_rest.FolderInitFile:
-    properties:
-      mime:
-        type: string
-      path:
-        type: string
-      sha256:
-        type: string
-      size:
-        type: integer
-    type: object
-  api_rest.FolderInitRequest:
-    properties:
-      files:
-        items:
-          $ref: '#/definitions/api_rest.FolderInitFile'
-        type: array
-      idempotencyKey:
-        type: string
-      parentId:
-        type: string
-      rootName:
-        type: string
-    required:
-    - files
-    - rootName
-    type: object
-  api_rest.FolderInitResponse:
-    properties:
-      files:
-        items:
-          $ref: '#/definitions/uploads.FolderInitFileResponse'
-        type: array
-      folders:
-        items:
-          additionalProperties:
-            type: string
-          type: object
-        type: array
-      rootFolderId:
-        type: string
-      uploadId:
-        type: string
-    type: object
-  api_rest.abortRequest:
-    properties:
-      sessionId:
-        type: string
-    required:
-    - sessionId
-    type: object
-  api_rest.abortResponse:
-    properties:
-      message:
-        example: aborted
-        type: string
-    type: object
-  api_rest.completeRequest:
-    properties:
-      clientSha256:
-        type: string
-      folderId:
-        type: string
-      sessionId:
-        type: string
-    type: object
-  api_rest.createFolderRequest:
-    properties:
-      name:
-        type: string
-      parentId:
-        type: string
-    required:
-    - name
-    type: object
-  api_rest.createSessionRequest:
-    properties:
-      clientSha256:
-        type: string
-      declaredMime:
-        type: string
-      filename:
-        type: string
-      originalSize:
-        type: integer
-    type: object
-  api_rest.createSessionResponse:
-    properties:
-      existingFileId:
-        type: string
-      sessionId:
-        type: string
-      skipUpload:
-        type: boolean
-      tempBlobKey:
-        type: string
-      uploadUrl:
-        type: string
-      userFileId:
-        type: string
-    type: object
-  api_rest.downloadURLResponse:
-    properties:
-      downloadUrl:
-        example: https://storage.example.com/files/abc123.pdf
-        type: string
-    type: object
-  api_rest.errorResponse:
-    properties:
-      error:
-        example: invalid request
-        type: string
-    type: object
-  api_rest.fileListResponse:
-    properties:
-      files:
-        items:
-          $ref: '#/definitions/backend_internal_files.FileListItem'
-        type: array
-    type: object
-  api_rest.fileVersionsResponse:
-    properties:
-      versions:
-        items:
-          $ref: '#/definitions/backend_internal_files.FileVersion'
-        type: array
-    type: object
-  api_rest.forgotPasswordResponse:
-    properties:
-      message:
-        example: if the email exists, a reset link was sent
-        type: string
-    type: object
-  api_rest.forgotRequest:
-    properties:
-      email:
-        type: string
-    required:
-    - email
-    type: object
-  api_rest.loginRequest:
-    properties:
-      email:
-        type: string
-      password:
-        type: string
-    required:
-    - email
-    - password
-    type: object
-  api_rest.loginResponse:
-    properties:
-      access_token:
-        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-        type: string
-    type: object
-  api_rest.logoutRequest:
-    properties:
-      refresh_token:
-        type: string
-    type: object
-  api_rest.logoutResponse:
-    properties:
-      message:
-        example: logged out
-        type: string
-    type: object
-  api_rest.messageResponse:
-    properties:
-      message:
-        example: operation completed successfully
-        type: string
-    type: object
-  api_rest.moveFolderRequest:
-    properties:
-      targetParentId:
-        type: string
-    type: object
-  api_rest.moveRequest:
-    properties:
-      targetFolderId:
-        type: string
-    type: object
-  api_rest.patchRequest:
-    properties:
-      filename:
-        type: string
-      tags:
-        items:
-          type: string
-        type: array
-    type: object
-  api_rest.quotaUsageResponse:
-    properties:
-      deduped_bytes:
-        type: integer
-      original_bytes:
-        type: integer
-      quota_bytes:
-        type: integer
-      quota_used_percent:
-        type: number
-      savings_bytes:
-        type: integer
-      savings_percent:
-        type: number
-    type: object
-  api_rest.refreshRequest:
-    properties:
-      refresh_token:
-        type: string
-    type: object
-  api_rest.refreshResponse:
-    properties:
-      access_token:
-        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-        type: string
-    type: object
-  api_rest.renameFolderRequest:
-    properties:
-      name:
-        type: string
-    required:
-    - name
-    type: object
-  api_rest.resetPasswordResponse:
-    properties:
-      message:
-        example: password reset successful
-        type: string
-    type: object
-  api_rest.resetRequest:
-    properties:
-      newPassword:
-        minLength: 6
-        type: string
-      token:
-        type: string
-    required:
-    - newPassword
-    - token
-    type: object
-  api_rest.searchFileItem:
-    properties:
-      contentHash:
-        type: string
-      createdAt:
-        type: string
-      dedupSavings:
-        type: integer
-      downloadCount:
-        type: integer
-      filename:
-        type: string
-      id:
-        type: string
-      mime:
-        type: string
-      physicalSize:
-        type: integer
-      rank:
-        type: number
-      refCount:
-        type: integer
-      size:
-        type: integer
-      updatedAt:
-        type: string
-    type: object
-  api_rest.searchFilesResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/api_rest.searchFileItem'
-        type: array
-      limit:
-        type: integer
-      offset:
-        type: integer
-      total:
-        type: integer
-    type: object
-  api_rest.signupRequest:
-    properties:
-      email:
-        type: string
-      fullName:
-        type: string
-      password:
-        minLength: 6
-        type: string
-    required:
-    - email
-    - password
-    type: object
-  api_rest.signupResponse:
-    properties:
-      message:
-        example: user created
-        type: string
-      verification_token:
-        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-        type: string
-    type: object
-  api_rest.verifyResponse:
-    properties:
-      message:
-        example: email verified
-        type: string
-    type: object
   backend_internal_files.FileListItem:
     properties:
       contentHash:
@@ -373,35 +63,7 @@ definitions:
       id:
         type: string
     type: object
-  server.GraphQLRequest:
-    properties:
-      operationName:
-        type: string
-      query:
-        type: string
-      variables:
-        additionalProperties: true
-        type: object
-    type: object
-  server.GraphQLResponse:
-    properties:
-      data: {}
-      errors:
-        items:
-          additionalProperties: true
-          type: object
-        type: array
-    type: object
-  server.WSMessage:
-    properties:
-      downloadCount:
-        type: integer
-      fileId:
-        type: string
-      ts:
-        type: integer
-    type: object
-  uploads.FolderInitFileResponse:
+  backend_internal_uploads.FolderInitFileResponse:
     properties:
       deduped:
         type: boolean
@@ -417,6 +79,344 @@ definitions:
         type: string
       userFileId:
         type: string
+    type: object
+  internal_api_rest.FolderInitFile:
+    properties:
+      mime:
+        type: string
+      path:
+        type: string
+      sha256:
+        type: string
+      size:
+        type: integer
+    type: object
+  internal_api_rest.FolderInitRequest:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/internal_api_rest.FolderInitFile'
+        type: array
+      idempotencyKey:
+        type: string
+      parentId:
+        type: string
+      rootName:
+        type: string
+    required:
+    - files
+    - rootName
+    type: object
+  internal_api_rest.FolderInitResponse:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/backend_internal_uploads.FolderInitFileResponse'
+        type: array
+      folders:
+        items:
+          additionalProperties:
+            type: string
+          type: object
+        type: array
+      rootFolderId:
+        type: string
+      uploadId:
+        type: string
+    type: object
+  internal_api_rest.abortRequest:
+    properties:
+      sessionId:
+        type: string
+    required:
+    - sessionId
+    type: object
+  internal_api_rest.abortResponse:
+    properties:
+      message:
+        example: aborted
+        type: string
+    type: object
+  internal_api_rest.completeRequest:
+    properties:
+      clientSha256:
+        type: string
+      folderId:
+        type: string
+      sessionId:
+        type: string
+    type: object
+  internal_api_rest.createFolderRequest:
+    properties:
+      name:
+        type: string
+      parentId:
+        type: string
+    required:
+    - name
+    type: object
+  internal_api_rest.createSessionRequest:
+    properties:
+      clientSha256:
+        type: string
+      declaredMime:
+        type: string
+      filename:
+        type: string
+      originalSize:
+        type: integer
+    type: object
+  internal_api_rest.createSessionResponse:
+    properties:
+      existingFileId:
+        type: string
+      sessionId:
+        type: string
+      skipUpload:
+        type: boolean
+      tempBlobKey:
+        type: string
+      uploadUrl:
+        type: string
+      userFileId:
+        type: string
+    type: object
+  internal_api_rest.downloadURLResponse:
+    properties:
+      downloadUrl:
+        example: https://storage.example.com/files/abc123.pdf
+        type: string
+    type: object
+  internal_api_rest.errorResponse:
+    properties:
+      error:
+        example: invalid request
+        type: string
+    type: object
+  internal_api_rest.fileListResponse:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/backend_internal_files.FileListItem'
+        type: array
+    type: object
+  internal_api_rest.fileVersionsResponse:
+    properties:
+      versions:
+        items:
+          $ref: '#/definitions/backend_internal_files.FileVersion'
+        type: array
+    type: object
+  internal_api_rest.forgotPasswordResponse:
+    properties:
+      message:
+        example: if the email exists, a reset link was sent
+        type: string
+    type: object
+  internal_api_rest.forgotRequest:
+    properties:
+      email:
+        type: string
+    required:
+    - email
+    type: object
+  internal_api_rest.loginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  internal_api_rest.loginResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  internal_api_rest.logoutRequest:
+    properties:
+      refresh_token:
+        type: string
+    type: object
+  internal_api_rest.logoutResponse:
+    properties:
+      message:
+        example: logged out
+        type: string
+    type: object
+  internal_api_rest.messageResponse:
+    properties:
+      message:
+        example: operation completed successfully
+        type: string
+    type: object
+  internal_api_rest.moveFolderRequest:
+    properties:
+      targetParentId:
+        type: string
+    type: object
+  internal_api_rest.moveRequest:
+    properties:
+      targetFolderId:
+        type: string
+    type: object
+  internal_api_rest.patchRequest:
+    properties:
+      filename:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  internal_api_rest.quotaUsageResponse:
+    properties:
+      deduped_bytes:
+        type: integer
+      original_bytes:
+        type: integer
+      quota_bytes:
+        type: integer
+      quota_used_percent:
+        type: number
+      savings_bytes:
+        type: integer
+      savings_percent:
+        type: number
+    type: object
+  internal_api_rest.refreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    type: object
+  internal_api_rest.refreshResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  internal_api_rest.renameFolderRequest:
+    properties:
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  internal_api_rest.resetPasswordResponse:
+    properties:
+      message:
+        example: password reset successful
+        type: string
+    type: object
+  internal_api_rest.resetRequest:
+    properties:
+      newPassword:
+        minLength: 6
+        type: string
+      token:
+        type: string
+    required:
+    - newPassword
+    - token
+    type: object
+  internal_api_rest.searchFileItem:
+    properties:
+      contentHash:
+        type: string
+      createdAt:
+        type: string
+      dedupSavings:
+        type: integer
+      downloadCount:
+        type: integer
+      filename:
+        type: string
+      id:
+        type: string
+      mime:
+        type: string
+      physicalSize:
+        type: integer
+      rank:
+        type: number
+      refCount:
+        type: integer
+      size:
+        type: integer
+      updatedAt:
+        type: string
+    type: object
+  internal_api_rest.searchFilesResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_api_rest.searchFileItem'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_api_rest.signupRequest:
+    properties:
+      email:
+        type: string
+      fullName:
+        type: string
+      password:
+        minLength: 6
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  internal_api_rest.signupResponse:
+    properties:
+      message:
+        example: user created
+        type: string
+      verification_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  internal_api_rest.verifyResponse:
+    properties:
+      message:
+        example: email verified
+        type: string
+    type: object
+  internal_server.GraphQLRequest:
+    properties:
+      operationName:
+        type: string
+      query:
+        type: string
+      variables:
+        additionalProperties: true
+        type: object
+    type: object
+  internal_server.GraphQLResponse:
+    properties:
+      data: {}
+      errors:
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+    type: object
+  internal_server.WSMessage:
+    properties:
+      downloadCount:
+        type: integer
+      fileId:
+        type: string
+      ts:
+        type: integer
     type: object
 host: localhost:8080
 info:
@@ -579,14 +579,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_rest.forgotRequest'
+          $ref: '#/definitions/internal_api_rest.forgotRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_rest.forgotPasswordResponse'
+            $ref: '#/definitions/internal_api_rest.forgotPasswordResponse'
       summary: Forgot password
       tags:
       - auth
@@ -600,22 +600,22 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_rest.loginRequest'
+          $ref: '#/definitions/internal_api_rest.loginRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_rest.loginResponse'
+            $ref: '#/definitions/internal_api_rest.loginResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       summary: Login
       tags:
       - auth
@@ -628,14 +628,14 @@ paths:
         in: body
         name: body
         schema:
-          $ref: '#/definitions/api_rest.logoutRequest'
+          $ref: '#/definitions/internal_api_rest.logoutRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_rest.logoutResponse'
+            $ref: '#/definitions/internal_api_rest.logoutResponse'
       summary: Logout
       tags:
       - auth
@@ -648,22 +648,22 @@ paths:
         in: body
         name: body
         schema:
-          $ref: '#/definitions/api_rest.refreshRequest'
+          $ref: '#/definitions/internal_api_rest.refreshRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_rest.refreshResponse'
+            $ref: '#/definitions/internal_api_rest.refreshResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       summary: Refresh token
       tags:
       - auth
@@ -677,18 +677,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_rest.resetRequest'
+          $ref: '#/definitions/internal_api_rest.resetRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_rest.resetPasswordResponse'
+            $ref: '#/definitions/internal_api_rest.resetPasswordResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       summary: Reset password
       tags:
       - auth
@@ -703,18 +703,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_rest.signupRequest'
+          $ref: '#/definitions/internal_api_rest.signupRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/api_rest.signupResponse'
+            $ref: '#/definitions/internal_api_rest.signupResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       summary: Sign up
       tags:
       - auth
@@ -732,11 +732,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_rest.verifyResponse'
+            $ref: '#/definitions/internal_api_rest.verifyResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       summary: Verify email
       tags:
       - auth
@@ -760,7 +760,7 @@ paths:
         "200":
           description: Files list response
           schema:
-            $ref: '#/definitions/api_rest.fileListResponse'
+            $ref: '#/definitions/internal_api_rest.fileListResponse'
         "500":
           description: Internal server error
           schema:
@@ -793,11 +793,11 @@ paths:
         "200":
           description: Delete confirmation
           schema:
-            $ref: '#/definitions/api_rest.messageResponse'
+            $ref: '#/definitions/internal_api_rest.messageResponse'
         "400":
           description: Bad request
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       security:
       - BearerAuth: []
       summary: Delete file
@@ -852,18 +852,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_rest.patchRequest'
+          $ref: '#/definitions/internal_api_rest.patchRequest'
       produces:
       - application/json
       responses:
         "200":
           description: Update confirmation
           schema:
-            $ref: '#/definitions/api_rest.messageResponse'
+            $ref: '#/definitions/internal_api_rest.messageResponse'
         "400":
           description: Bad request
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       security:
       - BearerAuth: []
       summary: Update file metadata
@@ -886,15 +886,15 @@ paths:
         "200":
           description: Download URL response
           schema:
-            $ref: '#/definitions/api_rest.downloadURLResponse'
+            $ref: '#/definitions/internal_api_rest.downloadURLResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
         "404":
           description: File not found
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       security:
       - BearerAuth: []
       summary: Get download URL
@@ -916,18 +916,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_rest.moveRequest'
+          $ref: '#/definitions/internal_api_rest.moveRequest'
       produces:
       - application/json
       responses:
         "200":
           description: Move confirmation
           schema:
-            $ref: '#/definitions/api_rest.messageResponse'
+            $ref: '#/definitions/internal_api_rest.messageResponse'
         "400":
           description: Bad request
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       security:
       - BearerAuth: []
       summary: Move file to different folder
@@ -950,11 +950,11 @@ paths:
         "200":
           description: Restore confirmation
           schema:
-            $ref: '#/definitions/api_rest.messageResponse'
+            $ref: '#/definitions/internal_api_rest.messageResponse'
         "400":
           description: Bad request
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       security:
       - BearerAuth: []
       summary: Restore file from trash
@@ -977,7 +977,7 @@ paths:
         "200":
           description: File versions list
           schema:
-            $ref: '#/definitions/api_rest.fileVersionsResponse'
+            $ref: '#/definitions/internal_api_rest.fileVersionsResponse'
         "500":
           description: Internal server error
           schema:
@@ -1017,12 +1017,83 @@ paths:
         "400":
           description: Bad request
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       security:
       - BearerAuth: []
       summary: Create new file version
       tags:
       - files
+  /api/v1/folder-shares:
+    post:
+      consumes:
+      - application/json
+      description: Create a folder share with advanced options (recursive, snapshot
+        mode, etc.)
+      parameters:
+      - description: Folder share configuration
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Folder share created
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Not the folder owner
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Folder not found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create advanced folder share
+      tags:
+      - shares
+  /api/v1/folder-shares/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get detailed information about a folder share (creator only)
+      parameters:
+      - description: Folder share ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Share details
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Not the share creator
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Share not found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get folder share info
+      tags:
+      - shares
   /api/v1/folders:
     get:
       consumes:
@@ -1074,7 +1145,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_rest.createFolderRequest'
+          $ref: '#/definitions/internal_api_rest.createFolderRequest'
       produces:
       - application/json
       responses:
@@ -1156,7 +1227,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_rest.renameFolderRequest'
+          $ref: '#/definitions/internal_api_rest.renameFolderRequest'
       produces:
       - application/json
       responses:
@@ -1381,7 +1452,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_rest.moveFolderRequest'
+          $ref: '#/definitions/internal_api_rest.moveFolderRequest'
       produces:
       - application/json
       responses:
@@ -1457,6 +1528,195 @@ paths:
       summary: Get folder tree structure
       tags:
       - folders
+  /api/v1/fs/{token}:
+    get:
+      consumes:
+      - application/json
+      description: Get details and contents of a publicly shared folder using share
+        token
+      parameters:
+      - description: Folder share token
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Folder share details with items
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Share not found
+          schema:
+            additionalProperties: true
+            type: object
+        "410":
+          description: Share expired
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Resolve public folder share
+      tags:
+      - shares
+  /api/v1/fs/{token}/ancestors:
+    get:
+      consumes:
+      - application/json
+      description: Get the ancestor folders (breadcrumb path) for a folder within
+        a share
+      parameters:
+      - description: Folder share token
+        in: path
+        name: token
+        required: true
+        type: string
+      - description: Folder ID to get ancestors for
+        in: query
+        name: folderId
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of ancestor folders
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Share not found
+          schema:
+            additionalProperties: true
+            type: object
+        "410":
+          description: Share expired
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get folder share ancestors
+      tags:
+      - shares
+  /api/v1/fs/{token}/contents:
+    get:
+      consumes:
+      - application/json
+      description: Get the contents of a specific folder within a folder share
+      parameters:
+      - description: Folder share token
+        in: path
+        name: token
+        required: true
+        type: string
+      - description: Specific folder ID to list (defaults to root shared folder)
+        in: query
+        name: folderId
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Folder contents
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Share not found
+          schema:
+            additionalProperties: true
+            type: object
+        "410":
+          description: Share expired
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get folder share contents
+      tags:
+      - shares
+  /api/v1/fs/{token}/download:
+    get:
+      consumes:
+      - application/json
+      description: Download all files in a folder share as a ZIP archive
+      parameters:
+      - description: Folder share token
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/zip
+      responses:
+        "200":
+          description: ZIP archive of folder contents
+          schema:
+            type: file
+        "404":
+          description: Share not found
+          schema:
+            additionalProperties: true
+            type: object
+        "410":
+          description: Share expired
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Download folder share as ZIP archive
+      tags:
+      - shares
+  /api/v1/fs/{token}/download/{fileId}:
+    get:
+      consumes:
+      - application/json
+      description: Get a download URL for a specific file within a folder share
+      parameters:
+      - description: Folder share token
+        in: path
+        name: token
+        required: true
+        type: string
+      - description: File ID to download
+        in: path
+        name: fileId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Download URL and file info
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: File not accessible through this share
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Share or file not found
+          schema:
+            additionalProperties: true
+            type: object
+        "410":
+          description: Share expired
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Download file from folder share
+      tags:
+      - shares
   /api/v1/graphql:
     post:
       consumes:
@@ -1468,19 +1728,51 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/server.GraphQLRequest'
+          $ref: '#/definitions/internal_server.GraphQLRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/server.GraphQLResponse'
+            $ref: '#/definitions/internal_server.GraphQLResponse'
       security:
       - BearerAuth: []
       summary: GraphQL endpoint
       tags:
       - graphql
+  /api/v1/s/{token}:
+    get:
+      consumes:
+      - application/json
+      description: Get details of a publicly shared file using share token
+      parameters:
+      - description: Share token
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Share details with download URL
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Share not found
+          schema:
+            additionalProperties: true
+            type: object
+        "410":
+          description: Share expired
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Resolve public file share
+      tags:
+      - shares
   /api/v1/search/files:
     get:
       description: Search for files using various filters including query text, MIME
@@ -1520,20 +1812,382 @@ paths:
         "200":
           description: Search results with files array and metadata
           schema:
-            $ref: '#/definitions/api_rest.searchFilesResponse'
+            $ref: '#/definitions/internal_api_rest.searchFilesResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       security:
       - BearerAuth: []
       summary: Search files across the system
       tags:
       - search
+  /api/v1/shares/files/{id}/download:
+    get:
+      consumes:
+      - application/json
+      description: Get download URL for a file shared with the authenticated user
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Download URL
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Access denied
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: File not found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Download shared file
+      tags:
+      - shares
+  /api/v1/shares/files/{id}/share:
+    post:
+      consumes:
+      - application/json
+      description: Create a public share link for a file
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Share options (title, description, expiresAt)
+        in: body
+        name: body
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Share created with token and URL
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Not the file owner
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: File not found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create public file share
+      tags:
+      - shares
+  /api/v1/shares/files/{id}/share/user:
+    post:
+      consumes:
+      - application/json
+      description: Share a file with a specific user by email with specified permissions
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Target user email and permission (read/write)
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Share created
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Not the file owner
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: File or target user not found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Share file with specific user
+      tags:
+      - shares
+  /api/v1/shares/files/{id}/shares:
+    get:
+      consumes:
+      - application/json
+      description: List all shares (public and user-specific) for a file
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of public and user shares
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Not the file owner
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: File not found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List file shares
+      tags:
+      - shares
+  /api/v1/shares/folders/{id}/ancestors:
+    get:
+      consumes:
+      - application/json
+      description: Get the parent folder hierarchy for a folder shared with the authenticated
+        user
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of ancestor folders
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Access denied
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Folder not found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List ancestors of shared folder
+      tags:
+      - shares
+  /api/v1/shares/folders/{id}/contents:
+    get:
+      consumes:
+      - application/json
+      description: List files and subfolders in a folder shared with the authenticated
+        user
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Folder contents
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Access denied
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Folder not found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List contents of shared folder
+      tags:
+      - shares
+  /api/v1/shares/folders/{id}/share:
+    post:
+      consumes:
+      - application/json
+      description: Create a public share link for a folder
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Share options (title, description, expiresAt)
+        in: body
+        name: body
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Share created with token and URL
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Not the folder owner
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Folder not found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create public folder share
+      tags:
+      - shares
+  /api/v1/shares/folders/{id}/share/user:
+    post:
+      consumes:
+      - application/json
+      description: Share a folder with a specific user by email with specified permissions
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Target user email and permission (read/write)
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Share created
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Not the folder owner
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Folder or target user not found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Share folder with specific user
+      tags:
+      - shares
+  /api/v1/shares/shared-with-me:
+    get:
+      consumes:
+      - application/json
+      description: Get all files and folders that have been shared with the authenticated
+        user
+      parameters:
+      - description: Number of items per page (default 50)
+        in: query
+        name: limit
+        type: integer
+      - description: Pagination offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of shared files and folders
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List items shared with me
+      tags:
+      - shares
+  /api/v1/shares/shares/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Revoke a file or folder share (creator only)
+      parameters:
+      - description: Share ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Share revoked
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Not the share creator
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Share not found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Revoke share
+      tags:
+      - shares
   /api/v1/uploads/abort:
     post:
       consumes:
@@ -1545,14 +2199,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_rest.abortRequest'
+          $ref: '#/definitions/internal_api_rest.abortRequest'
       produces:
       - application/json
       responses:
         "200":
           description: Upload aborted successfully
           schema:
-            $ref: '#/definitions/api_rest.abortResponse'
+            $ref: '#/definitions/internal_api_rest.abortResponse'
         "400":
           description: Bad request
           schema:
@@ -1593,7 +2247,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_rest.completeRequest'
+          $ref: '#/definitions/internal_api_rest.completeRequest'
       produces:
       - application/json
       responses:
@@ -1649,14 +2303,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_rest.FolderInitRequest'
+          $ref: '#/definitions/internal_api_rest.FolderInitRequest'
       produces:
       - application/json
       responses:
         "200":
           description: Upload session initialized
           schema:
-            $ref: '#/definitions/api_rest.FolderInitResponse'
+            $ref: '#/definitions/internal_api_rest.FolderInitResponse'
         "400":
           description: Bad request
           schema:
@@ -1698,18 +2352,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_rest.createSessionRequest'
+          $ref: '#/definitions/internal_api_rest.createSessionRequest'
       produces:
       - application/json
       responses:
         "200":
           description: File already exists (skip upload)
           schema:
-            $ref: '#/definitions/api_rest.createSessionResponse'
+            $ref: '#/definitions/internal_api_rest.createSessionResponse'
         "201":
           description: Upload session created
           schema:
-            $ref: '#/definitions/api_rest.createSessionResponse'
+            $ref: '#/definitions/internal_api_rest.createSessionResponse'
         "400":
           description: Bad request
           schema:
@@ -1765,23 +2419,23 @@ paths:
         "200":
           description: Quota updated successfully
           schema:
-            $ref: '#/definitions/api_rest.messageResponse'
+            $ref: '#/definitions/internal_api_rest.messageResponse'
         "400":
           description: Bad request
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
         "403":
           description: Admin access required
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       security:
       - BearerAuth: []
       summary: Update user quota (admin only)
@@ -1797,15 +2451,15 @@ paths:
         "200":
           description: Quota usage details
           schema:
-            $ref: '#/definitions/api_rest.quotaUsageResponse'
+            $ref: '#/definitions/internal_api_rest.quotaUsageResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/api_rest.errorResponse'
+            $ref: '#/definitions/internal_api_rest.errorResponse'
       security:
       - BearerAuth: []
       summary: Get current user quota usage
@@ -1828,7 +2482,7 @@ paths:
         "200":
           description: Example server message (for documentation only)
           schema:
-            $ref: '#/definitions/server.WSMessage'
+            $ref: '#/definitions/internal_server.WSMessage'
       summary: WebSocket for download updates
       tags:
       - websocket

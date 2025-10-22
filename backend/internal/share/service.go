@@ -24,12 +24,6 @@ type Handler struct {
 }
 
 func (h *Handler) ResolveShare() gin.HandlerFunc {
-	//	@Summary	Resolve public share
-	//	@Tags		shares
-	//	@Produce	json
-	//	@Param		token	path		string	true	"Share token"
-	//	@Success	200		{object}	map[string]interface{}
-	//	@Router		/api/v1/s/{token} [get]
 	return func(ctx *gin.Context) {
 		token := ctx.Param("token")
 		cacheKey := cache.ShareResolveKey(token)
@@ -133,14 +127,6 @@ func (h *Handler) ResolveShare() gin.HandlerFunc {
 }
 
 func (h *Handler) CreatePublicFileShare() gin.HandlerFunc {
-	//	@Summary	Create public file share
-	//	@Tags		shares
-	//	@Accept		json
-	//	@Produce	json
-	//	@Param		id	path	string	true	"File ID"
-	//	@Security	BearerAuth
-	//	@Success	201	{object}	map[string]interface{}
-	//	@Router		/api/v1/shares/files/{id}/share [post]
 	return func(c *gin.Context) {
 		userID := auth.GetUserIDFromCtx(c.Request.Context())
 		fileId := c.Param("id")
@@ -713,12 +699,6 @@ func (h *Handler) ListSharedFolderAncestors() gin.HandlerFunc {
 }
 
 func (h *Handler) ListSharedWithMe() gin.HandlerFunc {
-	//	@Summary	List items shared with me
-	//	@Tags		shares
-	//	@Produce	json
-	//	@Security	BearerAuth
-	//	@Success	200	{object}	map[string]interface{}
-	//	@Router		/api/v1/shared-with-me [get]
 	return func(c *gin.Context) {
 		userID := auth.GetUserIDFromCtx(c.Request.Context())
 		if userID == "" {
