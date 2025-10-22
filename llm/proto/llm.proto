@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package llm;
+
+option go_package = "backend/internal/llmclient/proto";
+
+//LLM service for document processing and Q&A
+service LLMService{
+    rpc Summarize(SummarizeRequest) returns (SummarizeResponse);
+    rpc ProcessDocument(ProcessDocumentRequest) returns (ProcessDocumentResponse);
+    rpc Chat(ChatRequest) returns (ChatResponse);
+    rpc GetDocumentStatus(DocumentStatusRequest) returns (DocumentStatusResponse);
+}
+
+//Summerize RPC
+message SummarizeRequest{
+    string filename =1;
+    bytes content =2;
+}
+
+message SummarizeResponse{
+    string summary =1;
+    string error =2;
+}
+
+//ProcessDocument RPC
+message ProcessDocumentRequest{
+    string file_id =1;
+    string filename =2;
+    bytes content =3;
+}
+
+message ProcessDocumentResponse{
+    bool success =1;
+    string message =2;
+    string error =3;
+}
+
+//Chat RPC
+message ChatRequest{
+    string file_id = 1;
+    string question = 2;
+}
+message ChatResponse {
+  string answer = 1;
+  string error = 2;
+}
+
+// GetDocumentStatus RPC 
+message DocumentStatusRequest {
+  string file_id = 1;
+}
+
+message DocumentStatusResponse {
+  bool ready = 1;
+  string status = 2;
+  string error = 3;
+}

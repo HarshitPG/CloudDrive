@@ -1,0 +1,22 @@
+# Main Frameworks
+streamlit
+fastapi
+uvicorn[standard]  # Required to run the FastAPI server
+python-multipart # Required for FastAPI file uploads
+
+# LangChain Core & Components
+langchain                # For high-level chains/agents
+langchain-core           # For base abstractions (fixes pydantic_v1 error)
+langchain-community      # For FAISS and other community integrations
+langchain-text-splitters # For RecursiveCharacterTextSplitter
+langchain-google-genai   # For Google LLM and Embeddings
+
+# Other Dependencies
+google-generativeai    # Base Google Generative AI SDK
+python-dotenv            # For loading .env files
+PyPDF2                   # For reading PDF text
+faiss-cpu                # For the FAISS vector store
+
+grpcio 
+grpcio-tools 
+protobuf

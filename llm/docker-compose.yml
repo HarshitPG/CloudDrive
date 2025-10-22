@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    # Optional: pull model on startup
+    command: ["serve"]
+    # To pull a model, you can run: docker exec -it ollama ollama pull llama3.2
+
+volumes:
+  ollama_data:
