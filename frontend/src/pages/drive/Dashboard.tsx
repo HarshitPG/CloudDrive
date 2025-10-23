@@ -145,6 +145,9 @@ export default function Home() {
   const [previewMimeType, setPreviewMimeType] = useState<string | undefined>(
     undefined
   );
+  const [previewFileId, setPreviewFileId] = useState<string | undefined>(
+    undefined
+  );
   const isInFolder = !!folderId;
   // Search is enabled both at root and inside folders now.
   const isSearchDisabled = false;
@@ -433,6 +436,7 @@ export default function Home() {
         "filename" in item && item.filename ? item.filename : item.name
       );
       setPreviewMimeType("mimeType" in item ? item.mimeType : undefined);
+      setPreviewFileId(item.id);
       setPreviewOpen(true);
     } catch (error) {
       console.error("Preview failed:", error);
@@ -990,10 +994,12 @@ export default function Home() {
           setPreviewUrl(undefined);
           setPreviewFilename(undefined);
           setPreviewMimeType(undefined);
+          setPreviewFileId(undefined);
         }}
         url={previewUrl}
         filename={previewFilename}
         mimeType={previewMimeType}
+        fileId={previewFileId}
       />
 
       {/* Delete confirmation modal */}
