@@ -705,17 +705,14 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Generate a pre-signed download URL for a file",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Get a presigned URL to download a file by ID",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "files"
                 ],
-                "summary": "Get download URL",
+                "summary": "Download a file",
                 "parameters": [
                     {
                         "type": "string",
@@ -727,7 +724,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Download URL response",
+                        "description": "Presigned URL",
                         "schema": {
                             "$ref": "#/definitions/internal_api_rest.downloadURLResponse"
                         }
@@ -3161,6 +3158,341 @@
                         "description": "Example server message (for documentation only)",
                         "schema": {
                             "$ref": "#/definitions/internal_server.WSMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/files/{id}/chat": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Send a question to the LLM about the content of a processed file",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files",
+                    "llm"
+                ],
+                "summary": "Ask a question about a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Question request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/files/{id}/chat/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve the conversation history for a file's chat",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files",
+                    "llm"
+                ],
+                "summary": "Get chat history for a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete all chat messages and history for a file",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files",
+                    "llm"
+                ],
+                "summary": "Clear chat history for a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.messageResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/files/{id}/chat/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Check if a file is ready for chat interactions",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files",
+                    "llm"
+                ],
+                "summary": "Get chat processing status for a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/files/{id}/process": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Start processing a document to enable Q\u0026A chat capabilities",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files",
+                    "llm"
+                ],
+                "summary": "Process a file for chat functionality",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Processing started",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/files/{id}/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve the summary of a file, generating it if not available",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files",
+                    "llm"
+                ],
+                "summary": "Get or generate a quick summary for a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object"
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_rest.errorResponse"
                         }
                     }
                 }

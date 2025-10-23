@@ -871,9 +871,7 @@ paths:
       - files
   /api/v1/files/{id}/download:
     get:
-      consumes:
-      - application/json
-      description: Generate a pre-signed download URL for a file
+      description: Get a presigned URL to download a file by ID
       parameters:
       - description: File ID
         in: path
@@ -884,7 +882,7 @@ paths:
       - application/json
       responses:
         "200":
-          description: Download URL response
+          description: Presigned URL
           schema:
             $ref: '#/definitions/internal_api_rest.downloadURLResponse'
         "403":
@@ -897,7 +895,7 @@ paths:
             $ref: '#/definitions/internal_api_rest.errorResponse'
       security:
       - BearerAuth: []
-      summary: Get download URL
+      summary: Download a file
       tags:
       - files
   /api/v1/files/{id}/move:
@@ -2486,6 +2484,222 @@ paths:
       summary: WebSocket for download updates
       tags:
       - websocket
+  /files/{id}/chat:
+    post:
+      consumes:
+      - application/json
+      description: Send a question to the LLM about the content of a processed file
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Question request
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+        "503":
+          description: Service unavailable
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ask a question about a file
+      tags:
+      - files
+      - llm
+  /files/{id}/chat/history:
+    delete:
+      description: Delete all chat messages and history for a file
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_rest.messageResponse'
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+        "503":
+          description: Service unavailable
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Clear chat history for a file
+      tags:
+      - files
+      - llm
+    get:
+      description: Retrieve the conversation history for a file's chat
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+        "503":
+          description: Service unavailable
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get chat history for a file
+      tags:
+      - files
+      - llm
+  /files/{id}/chat/status:
+    get:
+      description: Check if a file is ready for chat interactions
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+        "503":
+          description: Service unavailable
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get chat processing status for a file
+      tags:
+      - files
+      - llm
+  /files/{id}/process:
+    post:
+      description: Start processing a document to enable Q&A chat capabilities
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Processing started
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+        "503":
+          description: Service unavailable
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Process a file for chat functionality
+      tags:
+      - files
+      - llm
+  /files/{id}/summary:
+    get:
+      description: Retrieve the summary of a file, generating it if not available
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+        "503":
+          description: Service unavailable
+          schema:
+            $ref: '#/definitions/internal_api_rest.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get or generate a quick summary for a file
+      tags:
+      - files
+      - llm
 securityDefinitions:
   BearerAuth:
     description: 'Provide a Bearer token: "Bearer {access_token}"'

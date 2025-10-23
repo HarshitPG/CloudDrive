@@ -74,7 +74,7 @@ type fileHandler struct {
 //	@Tags			files
 //	@Produce		json
 //	@Param			id	path		string				true	"File ID"
-//	@Success		200	{object}	downloadResponse	"Presigned URL"
+//	@Success		200	{object}	downloadURLResponse	"Presigned URL"
 //	@Failure		403	{object}	errorResponse		"Forbidden"
 //	@Failure		404	{object}	errorResponse		"File not found"
 //	@Security		BearerAuth
@@ -378,6 +378,17 @@ func (h *fileHandler) listFilesPrimary(c *gin.Context) {
 }
 
 // clearChatHistory clears history
+// @Summary Clear chat history for a file
+// @Description Delete all chat messages and history for a file
+// @Tags files,llm
+// @Produce json
+// @Param id path string true "File ID"
+// @Success 200 {object} messageResponse
+// @Failure 404 {object} errorResponse "File not found"
+// @Failure 500 {object} errorResponse "Internal server error"
+// @Failure 503 {object} errorResponse "Service unavailable"
+// @Security BearerAuth
+// @Router /files/{id}/chat/history [delete]
 func (h *fileHandler) clearChatHistory(c *gin.Context) {
 	if h.llmSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, errorResponse{Error: "Chat service unavailable"})
@@ -395,6 +406,17 @@ func (h *fileHandler) clearChatHistory(c *gin.Context) {
 }
 
 // getChatHistory returns chat history
+// @Summary Get chat history for a file
+// @Description Retrieve the conversation history for a file's chat
+// @Tags files,llm
+// @Produce json
+// @Param id path string true "File ID"
+// @Success 200 {object} object
+// @Failure 404 {object} errorResponse "File not found"
+// @Failure 500 {object} errorResponse "Internal server error"
+// @Failure 503 {object} errorResponse "Service unavailable"
+// @Security BearerAuth
+// @Router /files/{id}/chat/history [get]
 func (h *fileHandler) getChatHistory(c *gin.Context) {
 	if h.llmSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, errorResponse{Error: "Chat service unavailable"})
@@ -412,6 +434,20 @@ func (h *fileHandler) getChatHistory(c *gin.Context) {
 }
 
 // chat handles Q&A
+// @Summary Ask a question about a file
+// @Description Send a question to the LLM about the content of a processed file
+// @Tags files,llm
+// @Accept json
+// @Produce json
+// @Param id path string true "File ID"
+// @Param request body object true "Question request" SchemaExample({"question": "What is this document about?"})
+// @Success 200 {object} object
+// @Failure 400 {object} errorResponse "Bad request"
+// @Failure 404 {object} errorResponse "File not found"
+// @Failure 500 {object} errorResponse "Internal server error"
+// @Failure 503 {object} errorResponse "Service unavailable"
+// @Security BearerAuth
+// @Router /files/{id}/chat [post]
 func (h *fileHandler) chat(c *gin.Context) {
 	if h.llmSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, errorResponse{Error: "Chat service unavailable"})
@@ -438,6 +474,17 @@ func (h *fileHandler) chat(c *gin.Context) {
 }
 
 // getChatStatus returns chat readiness
+// @Summary Get chat processing status for a file
+// @Description Check if a file is ready for chat interactions
+// @Tags files,llm
+// @Produce json
+// @Param id path string true "File ID"
+// @Success 200 {object} object
+// @Failure 404 {object} errorResponse "File not found"
+// @Failure 500 {object} errorResponse "Internal server error"
+// @Failure 503 {object} errorResponse "Service unavailable"
+// @Security BearerAuth
+// @Router /files/{id}/chat/status [get]
 func (h *fileHandler) getChatStatus(c *gin.Context) {
 	if h.llmSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, errorResponse{Error: "Chat service unavailable"})
@@ -455,6 +502,17 @@ func (h *fileHandler) getChatStatus(c *gin.Context) {
 }
 
 // processForChat starts document indexing
+// @Summary Process a file for chat functionality
+// @Description Start processing a document to enable Q&A chat capabilities
+// @Tags files,llm
+// @Produce json
+// @Param id path string true "File ID"
+// @Success 202 {object} map[string]interface{} "Processing started"
+// @Failure 404 {object} errorResponse "File not found"
+// @Failure 500 {object} errorResponse "Internal server error"
+// @Failure 503 {object} errorResponse "Service unavailable"
+// @Security BearerAuth
+// @Router /files/{id}/process [post]
 func (h *fileHandler) processForChat(c *gin.Context) {
 	if h.llmSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, errorResponse{Error: "Chat service unavailable"})
@@ -498,6 +556,17 @@ func (h *fileHandler) processForChat(c *gin.Context) {
 }
 
 // getSummary returns summary status
+// @Summary Get or generate a quick summary for a file
+// @Description Retrieve the summary of a file, generating it if not available
+// @Tags files,llm
+// @Produce json
+// @Param id path string true "File ID"
+// @Success 200 {object} object
+// @Failure 404 {object} errorResponse "File not found"
+// @Failure 500 {object} errorResponse "Internal server error"
+// @Failure 503 {object} errorResponse "Service unavailable"
+// @Security BearerAuth
+// @Router /files/{id}/summary [get]
 func (h *fileHandler) getSummary(c *gin.Context) {
 	if h.llmSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, errorResponse{Error: "Summary service unavailable"})
