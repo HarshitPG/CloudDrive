@@ -1,7 +1,6 @@
 package ratelimit
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -39,7 +38,7 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 		}
 
 		key := rl.keyPrefix + userID + ":" + strconv.FormatInt(time.Now().Unix()/int64(rl.window.Seconds()), 10)
-		fmt.Printf("key: %s\n", key)
+
 		val, err := rl.rdb.Incr(ctx, key).Result()
 		if err != nil {
 			logger.L.Error("redis incr failed", zap.Error(err))

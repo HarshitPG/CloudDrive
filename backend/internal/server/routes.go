@@ -3,6 +3,7 @@ package server
 import (
 	"backend/internal/api/rest"
 	"backend/internal/auth"
+	"backend/internal/llmclient"
 	"backend/internal/notifications"
 	ratelimit "backend/internal/ratelimiter"
 	"backend/internal/storage"
@@ -81,6 +82,34 @@ func (s *Server) RegisterRoutes() http.Handler {
 		if err != nil {
 			logger.L.Fatal("storage init failed", zap.Error(err))
 		}
+
+		var llmClient *llmclient.Client
+		llmAddr := os.Getenv("LLM_GRPC_ADDR")
+		llmToken := os.Getenv("LLM_GRPC_TOKEN")
+
+		if llmAddr != "" {
+			logger.L.Info("Init LLM gRPC Client", zap.String("address", llmAddr))
+			const attempts = 3
+			for i := 1; i <= attempts; i++ {
+				c, err := llmclient.NewClient(llmclient.Config{
+					Address: llmAddr,
+					Token:   llmToken,
+					Timeout: 30 * time.Second,
+				})
+				if err == nil {
+					llmClient = c
+					logger.L.Info("LLM gRPC client initialized successfully")
+					break
+				}
+				logger.L.Warn("Failed to initialize LLM client, will retry", zap.Int("attempt", i), zap.Int("max_attempts", attempts), zap.Error(err))
+				time.Sleep(3 * time.Second)
+			}
+			if llmClient == nil {
+				logger.L.Warn("Failed to initialize LLM client after retries (summary/chat features disabled)")
+			}
+		} else {
+			logger.L.Warn("LLM_GRPC_ADDR not set, summary/chat features disabled")
+		}
 		//	@Summary		WebSocket for download updates
 		//	@Description	Connect via WebSocket to receive download count updates. Optional query param fileId to filter.
 		//	@Tags			websocket
@@ -99,7 +128,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		rest.RegisterFolderRoutes(api, s.db.DB(), jwtSecret, s.cache, st)
 		rest.RegisterFileRoutes(api, s.db.DB(), st, jwtSecret, s.cache, func(ctx context.Context, fileID string, count int64) error {
 			return notifications.PublishDownload(ctx, s.rdb, fileID, count)
-		})
+		}, llmClient)
 	}
 
 	return r

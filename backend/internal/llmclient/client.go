@@ -34,7 +34,6 @@ func NewClient(cfg Config) (*Client, error) {
 		cfg.Timeout = 10 * time.Second
 	}
 
-	// Create circuit breaker
 	cbSettings := gobreaker.Settings{
 		Name:        "llm-grpc",
 		MaxRequests: 3,
@@ -46,25 +45,22 @@ func NewClient(cfg Config) (*Client, error) {
 	}
 	cb := gobreaker.NewCircuitBreaker(cbSettings)
 
-	// Connect to gRPC server using NewClient (non-deprecated)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	conn, err := grpc.NewClient(
+	conn, err := grpc.DialContext(
+		ctx,
 		cfg.Address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(64<<20),
+			grpc.MaxCallSendMsgSize(64<<20),
+		),
+		grpc.WithBlock(),
+		grpc.WithReturnConnectionError(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to LLM service: %w", err)
-	}
-
-	// Wait for connection to be ready
-	grpcCtx, grpcCancel := context.WithTimeout(ctx, 5*time.Second)
-	defer grpcCancel()
-
-	if err := waitForReady(grpcCtx, conn); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("LLM service not ready: %w", err)
 	}
 
 	return &Client{
@@ -74,19 +70,6 @@ func NewClient(cfg Config) (*Client, error) {
 		token:   cfg.Token,
 		timeout: cfg.Timeout,
 	}, nil
-}
-
-// waitForReady waits for the connection to be ready (replaces WithBlock)
-func waitForReady(ctx context.Context, conn *grpc.ClientConn) error {
-	for {
-		state := conn.GetState()
-		if state == 2 { // connectivity.Ready
-			return nil
-		}
-		if !conn.WaitForStateChange(ctx, state) {
-			return fmt.Errorf("connection timeout")
-		}
-	}
 }
 
 // Close closes the gRPC connection
@@ -101,7 +84,8 @@ func (c *Client) contextWithAuth(ctx context.Context) context.Context {
 
 // Summarize generates a quick summary of the document
 func (c *Client) Summarize(ctx context.Context, filename string, content []byte) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	// Longer timeout for summary generation (embeddings + FAISS build + LLM inference)
+	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
 	var summary string
@@ -150,7 +134,7 @@ func (c *Client) ProcessDocument(ctx context.Context, fileID, filename string, c
 
 // Chat asks a question about an indexed document
 func (c *Client) Chat(ctx context.Context, fileID, question string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
 	var answer string

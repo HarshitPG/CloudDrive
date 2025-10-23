@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"time"
 
 	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/cache"
 	fsvc "backend/internal/files"
+	"backend/internal/llmclient"
 	"backend/internal/storage"
 	"backend/internal/worker"
 
@@ -29,12 +31,18 @@ type fileVersionsResponse struct {
 	Versions []fsvc.FileVersion `json:"versions"`
 }
 
-func RegisterFileRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorage, jwtSecret string, cache cache.Cache, publish func(ctx context.Context, fileID string, downloadCount int64) error) {
+func RegisterFileRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorage, jwtSecret string, cache cache.Cache, publish func(ctx context.Context, fileID string, downloadCount int64) error, llmClient *llmclient.Client) {
 	files := rg.Group("/files")
 	files.Use(auth.RequireAuth(jwtSecret))
 	producer := worker.NewProducer()
 	svc := fsvc.New(db, st, cache, publish, producer)
-	h := &fileHandler{svc: svc, db: db}
+
+	var llmSvc llmclient.Service
+	if llmClient != nil {
+		llmSvc = llmclient.New(llmClient, st)
+		llmSvc.StartCleanupRoutine(10*time.Minute, 2*time.Hour)
+	}
+	h := &fileHandler{svc: svc, db: db, llmSvc: llmSvc}
 	files.GET("", h.listFilesPrimary)
 	files.GET("/:id", h.getFileMetadata)
 	files.GET("/:id/download", h.download)
@@ -44,30 +52,37 @@ func RegisterFileRoutes(rg *gin.RouterGroup, db *sql.DB, st *storage.MinioStorag
 	files.POST("/:id/move", h.move)
 	files.POST("/:id/versions", h.createVersion)
 	files.GET("/:id/versions", h.listVersions)
+
+	files.GET("/:id/summary", h.getSummary)
+	files.POST("/:id/process", h.processForChat)
+	files.GET("/:id/chat/status", h.getChatStatus)
+	files.POST("/:id/chat", h.chat)
+	files.GET("/:id/chat/history", h.getChatHistory)
+	files.DELETE("/:id/chat/history", h.clearChatHistory)
 }
 
 type fileHandler struct {
-	svc fsvc.Service
-	db  *sql.DB
+	svc    fsvc.Service
+	db     *sql.DB
+	llmSvc llmclient.Service
 }
 
 // Download godoc
 //
-//	@Summary		Get download URL
-//	@Description	Generate a pre-signed download URL for a file
+//	@Summary		Download a file
+//	@Description	Get a presigned URL to download a file by ID
 //	@Tags			files
-//	@Accept			json
 //	@Produce		json
 //	@Param			id	path		string				true	"File ID"
-//	@Success		200	{object}	downloadURLResponse	"Download URL response"
+//	@Success		200	{object}	downloadResponse	"Presigned URL"
 //	@Failure		403	{object}	errorResponse		"Forbidden"
 //	@Failure		404	{object}	errorResponse		"File not found"
 //	@Security		BearerAuth
 //	@Router			/api/v1/files/{id}/download [get]
 func (h *fileHandler) download(c *gin.Context) {
 	userID := auth.GetUserIDFromCtx(c.Request.Context())
-	fileId := c.Param("id")
-	url, err := h.svc.GetDownloadURL(c.Request.Context(), userID, fileId)
+	fileID := c.Param("id")
+	url, err := h.svc.GetDownloadURL(c.Request.Context(), userID, fileID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, errorResponse{Error: "file not found"})
@@ -76,15 +91,35 @@ func (h *fileHandler) download(c *gin.Context) {
 		c.JSON(http.StatusForbidden, errorResponse{Error: err.Error()})
 		return
 	}
+
+	// Trigger async summary generation if LLM service is available
+	if h.llmSvc != nil {
+		// Query for blob_key and filename
+		var blobKey, filename string
+		query := `
+			SELECT fc.blob_key, uf.filename
+			FROM user_files uf
+			JOIN file_contents fc ON uf.content_id = fc.id
+			WHERE uf.id = $1 AND uf.deleted_at IS NULL
+		`
+		if err := h.db.QueryRowContext(c.Request.Context(), query, fileID).Scan(&blobKey, &filename); err == nil {
+			go h.llmSvc.TriggerSummary(
+				context.Background(),
+				fileID,
+				blobKey,
+				filename,
+			)
+		}
+	}
 	_ = audit.Log(
 		c.Request.Context(),
 		h.db,
 		userID,
 		"download",
 		"file",
-		fileId,
+		fileID,
 		map[string]interface{}{
-			"fileID": fileId,
+			"fileID": fileID,
 		},
 	)
 
@@ -340,4 +375,141 @@ func (h *fileHandler) listFilesPrimary(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, fileListResponse{Files: files})
+}
+
+// clearChatHistory clears history
+func (h *fileHandler) clearChatHistory(c *gin.Context) {
+	if h.llmSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, errorResponse{Error: "Chat service unavailable"})
+		return
+	}
+
+	fileID := c.Param("id")
+	err := h.llmSvc.ClearChatHistory(c.Request.Context(), fileID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, messageResponse{Message: "Chat history cleared"})
+}
+
+// getChatHistory returns chat history
+func (h *fileHandler) getChatHistory(c *gin.Context) {
+	if h.llmSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, errorResponse{Error: "Chat service unavailable"})
+		return
+	}
+
+	fileID := c.Param("id")
+	history, err := h.llmSvc.GetChatHistory(c.Request.Context(), fileID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, history)
+}
+
+// chat handles Q&A
+func (h *fileHandler) chat(c *gin.Context) {
+	if h.llmSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, errorResponse{Error: "Chat service unavailable"})
+		return
+	}
+
+	fileID := c.Param("id")
+
+	var req struct {
+		Question string `json:"question" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errorResponse{Error: "Invalid request"})
+		return
+	}
+
+	response, err := h.llmSvc.Chat(c.Request.Context(), fileID, req.Question)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// getChatStatus returns chat readiness
+func (h *fileHandler) getChatStatus(c *gin.Context) {
+	if h.llmSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, errorResponse{Error: "Chat service unavailable"})
+		return
+	}
+
+	fileID := c.Param("id")
+	result, err := h.llmSvc.GetChatStatus(c.Request.Context(), fileID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+// processForChat starts document indexing
+func (h *fileHandler) processForChat(c *gin.Context) {
+	if h.llmSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, errorResponse{Error: "Chat service unavailable"})
+		return
+	}
+
+	userID := auth.GetUserIDFromCtx(c.Request.Context())
+	fileID := c.Param("id")
+
+	var blobKey, filename string
+	query := `
+        SELECT fc.blob_key, uf.filename
+        FROM user_files uf
+        JOIN file_contents fc ON uf.content_id = fc.id
+        WHERE uf.id = $1 AND uf.user_id = $2 AND uf.deleted_at IS NULL
+    `
+	if err := h.db.QueryRowContext(c.Request.Context(), query, fileID, userID).Scan(&blobKey, &filename); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, errorResponse{Error: "file not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		}
+		return
+	}
+
+	err := h.llmSvc.ProcessForChat(
+		c.Request.Context(),
+		fileID,
+		blobKey,
+		filename,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "Document processing started",
+		"file_id": fileID,
+	})
+}
+
+// getSummary returns summary status
+func (h *fileHandler) getSummary(c *gin.Context) {
+	if h.llmSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, errorResponse{Error: "Summary service unavailable"})
+		return
+	}
+
+	fileID := c.Param("id")
+	result, err := h.llmSvc.GetSummary(c.Request.Context(), fileID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
 }
