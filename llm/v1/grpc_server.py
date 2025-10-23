@@ -25,14 +25,15 @@ logger = logging.getLogger(__name__)
 # -------------------- Configuration --------------------
 GRPC_PORT = os.getenv("LLM_GRPC_PORT", "50051")
 GRPC_TOKEN = os.getenv("LLM_GRPC_TOKEN", "dev-secret-token")
-FAISS_INDEX_BASE = os.getenv("FAISS_INDEX_BASE", "./llm/faiss_indexes")
+FAISS_INDEX_BASE = os.getenv("FAISS_INDEX_BASE", "./faiss_indexes")
 
 # -------------------- Global Singletons (aligned with server.py) --------------------
 _embeddings: Optional[HuggingFaceEmbeddings] = None
 _llm_model: Optional[ChatOllama] = None
+_db: Optional[FAISS] = None  # Global FAISS store for summary (same as server.py)
 _qa_chain = None
 _summary_chain = None
-_document_stores: Dict[str, FAISS] = {}  # file_id -> FAISS store
+_document_stores: Dict[str, FAISS] = {}  # file_id -> FAISS store for chat
 
 # -------------------- Initialization (aligned with server.py startup) --------------------
 def init_models():
@@ -75,6 +76,17 @@ def get_text_chunks(text: str) -> list:
     )
     return splitter.split_text(text)
 
+def get_vector_store(text_chunks: list):
+    """Create and persist global FAISS vector store (same as server.py get_vector_store)"""
+    global _db
+    if not text_chunks:
+        logger.warning("No text chunks to process for vector store")
+        return False
+    
+    _db = FAISS.from_texts(text_chunks, _embeddings)
+    logger.info("Vector store created for summary")
+    return True
+
 def get_vector_store_for_file(file_id: str, text_chunks: list):
     """Create and persist FAISS vector store for a file (adapted from server.py)"""
     global _document_stores
@@ -115,8 +127,7 @@ def get_pdf_summary_chain():
     global _summary_chain
     if _summary_chain is None:
         prompt_template = """
-        Summarize the PDF as detailed as possible under 250 words.
-
+        Summarize the PDF as detailed as possible under 100 words.
         Context:
         {context}
 
@@ -157,36 +168,32 @@ class LLMServicer(llm_pb2_grpc.LLMServiceServicer):
             context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid token")
     
     def Summarize(self, request, context):
-        """Generate quick summary (aligned with /summary endpoint)"""
+        """Generate quick summary (aligned with /summary endpoint in server.py)"""
         self._validate_token(context)
         
         try:
             logger.info(f" Summarizing document: {request.filename}")
             
-            # Extract text from PDF
+            # Extract text from PDF (same approach as FastAPI server)
             raw_text = get_pdf_text_from_bytes(request.content)
-            if not raw_text.strip():
-                # Try decoding as plain text
-                try:
-                    raw_text = request.content.decode("utf-8", errors="ignore")
-                except:
-                    pass
             
             if not raw_text.strip():
-                return llm_pb2.SummarizeResponse(error="No extractable text in PDF")
+                return llm_pb2.SummarizeResponse(error="No extractable text in PDF(s).")
             
-            # Create temporary chunks for summary (like /summary endpoint)
+            # Create chunks for summary (like /summary endpoint)
             text_chunks = get_text_chunks(raw_text)
             if not text_chunks:
                 return llm_pb2.SummarizeResponse(error="Failed to chunk text")
             
-            # Create temporary FAISS store
-            temp_db = FAISS.from_texts(text_chunks, _embeddings)
+            # Build global FAISS store from full text (mirrors FastAPI's get_vector_store)
+            success = get_vector_store(text_chunks)
+            if not success:
+                return llm_pb2.SummarizeResponse(error="Failed to create vector store")
             
-            # Get relevant context (same query as server.py /summary)
-            docs = temp_db.similarity_search(
+            # Get relevant context using global _db (same query as server.py /summary)
+            docs = _db.similarity_search(
                 "A comprehensive summary of the document's main points and key findings",
-                k=3
+                k=5
             )
             context_text = "\n\n".join([d.page_content for d in docs])
             
@@ -300,7 +307,14 @@ def serve():
     """Start gRPC server"""
     init_models()
     
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    # Increase gRPC message size limits to handle large PDFs (default is 4MB)
+    server = grpc.server(
+        futures.ThreadPoolExecutor(max_workers=10),
+        options=[
+            ("grpc.max_send_message_length", 64 * 1024 * 1024),   # 64 MB
+            ("grpc.max_receive_message_length", 64 * 1024 * 1024), # 64 MB
+        ],
+    )
     llm_pb2_grpc.add_LLMServiceServicer_to_server(LLMServicer(), server)
     
     bind_addr = f"0.0.0.0:{GRPC_PORT}"
